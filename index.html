@@ -48,6 +48,7 @@ const Flag = (p) => <Icon {...p}><path d="M5 21V4" /><path d="M5 4h13l-3 4 3 4H5
 const AlertCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="13" /><line x1="12" y1="16.5" x2="12" y2="16.6" /></Icon>;
 const Trash2 = (p) => <Icon {...p}><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></Icon>;
 const Dumbbell = (p) => <Icon {...p}><path d="M4 12h16" /><path d="M4 9v6" /><path d="M20 9v6" /><path d="M7 7v10" /><path d="M17 7v10" /></Icon>;
+const Pencil = (p) => <Icon {...p}><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></Icon>;
 
 
 /* ---------------------------------- constants ---------------------------------- */
@@ -151,8 +152,8 @@ function App() {
   const [strength, setStrength] = useState([]);
   const [runs, setRuns] = useState([]);
   const [ready, setReady] = useState(false);
-  const [showStrengthForm, setShowStrengthForm] = useState(false);
-  const [showRunForm, setShowRunForm] = useState(false);
+  const [editingStrength, setEditingStrength] = useState(null); // null = closed; {} = new; entry = editing
+  const [editingRun, setEditingRun] = useState(null);
   const [dataMsg, setDataMsg] = useState(null);
   const fileInputRef = React.useRef(null);
 
@@ -165,22 +166,26 @@ function App() {
     })();
   }, []);
 
-  const addStrength = async (entry) => {
-    const next = [...strength, entry].sort((a, b) => a.date.localeCompare(b.date));
+  const saveStrength = async (entry) => {
+    const isUpdate = strength.some((e) => e.id === entry.id);
+    const next = (isUpdate ? strength.map((e) => (e.id === entry.id ? entry : e)) : [...strength, entry])
+      .sort((a, b) => a.date.localeCompare(b.date));
     setStrength(next);
-    setShowStrengthForm(false);
-    await apiSend({ type: "strength", action: "create", entry });
+    setEditingStrength(null);
+    await apiSend({ type: "strength", action: isUpdate ? "update" : "create", entry });
   };
   const deleteStrength = async (id) => {
     const next = strength.filter((e) => e.id !== id);
     setStrength(next);
     await apiSend({ type: "strength", action: "delete", id });
   };
-  const addRun = async (entry) => {
-    const next = [...runs, entry].sort((a, b) => a.date.localeCompare(b.date));
+  const saveRun = async (entry) => {
+    const isUpdate = runs.some((e) => e.id === entry.id);
+    const next = (isUpdate ? runs.map((e) => (e.id === entry.id ? entry : e)) : [...runs, entry])
+      .sort((a, b) => a.date.localeCompare(b.date));
     setRuns(next);
-    setShowRunForm(false);
-    await apiSend({ type: "runs", action: "create", entry });
+    setEditingRun(null);
+    await apiSend({ type: "runs", action: isUpdate ? "update" : "create", entry });
   };
   const deleteRun = async (id) => {
     const next = runs.filter((e) => e.id !== id);
@@ -259,28 +264,33 @@ function App() {
 
       <div className="pp-shell">
         <aside className="pp-rail">
-          <div className="pp-brand">
-            <span className="pp-brand-mark">PB</span>
-            <div className="pp-brand-text">
-              <div className="pp-brand-name">PROJECT BANKAI</div>
-              <div className="pp-brand-sub">Strength &amp; Run Coach</div>
+          <div className="pp-rail-top">
+            <div className="pp-brand">
+              <span className="pp-brand-mark">PB</span>
+              <div className="pp-brand-text">
+                <div className="pp-brand-name">PROJECT BANKAI</div>
+                <div className="pp-brand-sub">Strength &amp; Run Coach</div>
+              </div>
             </div>
+            <nav className="pp-nav">
+              {nav.map((n) => (
+                <button
+                  key={n.id}
+                  className={"pp-nav-btn" + (tab === n.id ? " active" : "")}
+                  onClick={() => setTab(n.id)}
+                >
+                  <n.icon size={17} strokeWidth={2} />
+                  <span>{n.label}</span>
+                </button>
+              ))}
+            </nav>
           </div>
-          <nav className="pp-nav">
-            {nav.map((n) => (
-              <button
-                key={n.id}
-                className={"pp-nav-btn" + (tab === n.id ? " active" : "")}
-                onClick={() => setTab(n.id)}
-              >
-                <n.icon size={17} strokeWidth={2} />
-                <span>{n.label}</span>
-              </button>
-            ))}
-          </nav>
-          <div className="pp-data-actions">
-            <button className="pp-btn ghost small" onClick={exportData}><Download size={13} /><span> Export</span></button>
-            <button className="pp-btn ghost small" onClick={triggerImport}><Upload size={13} /><span> Import</span></button>
+          <div className="pp-rail-footer">
+            <RaceCountdown compact />
+            <div className="pp-data-actions">
+              <button className="pp-btn ghost small" onClick={exportData}><Download size={13} /><span> Export</span></button>
+              <button className="pp-btn ghost small" onClick={triggerImport}><Upload size={13} /><span> Import</span></button>
+            </div>
           </div>
           <input
             type="file"
@@ -289,7 +299,6 @@ function App() {
             onChange={handleImportFile}
             style={{ display: "none" }}
           />
-          <RaceCountdown compact />
         </aside>
 
         <main className="pp-main">
@@ -301,13 +310,13 @@ function App() {
           ) : (
             <>
               {tab === "dashboard" && (
-                <Dashboard strength={strength} runs={runs} onLogLift={() => setShowStrengthForm(true)} onLogRun={() => setShowRunForm(true)} />
+                <Dashboard strength={strength} runs={runs} onLogLift={() => setEditingStrength({})} onLogRun={() => setEditingRun({})} />
               )}
               {tab === "strength" && (
-                <StrengthLog entries={strength} onAdd={() => setShowStrengthForm(true)} onDelete={deleteStrength} />
+                <StrengthLog entries={strength} onAdd={() => setEditingStrength({})} onEdit={(entry) => setEditingStrength(entry)} onDelete={deleteStrength} />
               )}
               {tab === "running" && (
-                <RunLog entries={runs} onAdd={() => setShowRunForm(true)} onDelete={deleteRun} />
+                <RunLog entries={runs} onAdd={() => setEditingRun({})} onEdit={(entry) => setEditingRun(entry)} onDelete={deleteRun} />
               )}
               {tab === "progress" && <Progression strength={strength} runs={runs} />}
               {tab === "coach" && <NextRunCoach runs={runs} />}
@@ -316,8 +325,8 @@ function App() {
         </main>
       </div>
 
-      {showStrengthForm && <StrengthForm onSave={addStrength} onClose={() => setShowStrengthForm(false)} />}
-      {showRunForm && <RunForm onSave={addRun} onClose={() => setShowRunForm(false)} />}
+      {editingStrength && <StrengthForm initialEntry={editingStrength.id ? editingStrength : null} onSave={saveStrength} onClose={() => setEditingStrength(null)} />}
+      {editingRun && <RunForm initialEntry={editingRun.id ? editingRun : null} onSave={saveRun} onClose={() => setEditingRun(null)} />}
     </div>
   );
 }
@@ -544,7 +553,7 @@ function PageHeader({ title, sub, actions }) {
    STRENGTH LOG
    ====================================================================== */
 
-function StrengthLog({ entries, onAdd, onDelete }) {
+function StrengthLog({ entries, onAdd, onEdit, onDelete }) {
   const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
   return (
     <div className="pp-page">
@@ -572,7 +581,10 @@ function StrengthLog({ entries, onAdd, onDelete }) {
                 </div>
                 {e.notes && <div className="pp-list-notes">{e.notes}</div>}
               </div>
-              <button className="pp-icon-btn" onClick={() => onDelete(e.id)}><Trash2 size={15} /></button>
+              <div className="pp-list-actions">
+                <button className="pp-icon-btn" onClick={() => onEdit(e)}><Pencil size={15} /></button>
+                <button className="pp-icon-btn" onClick={() => onDelete(e.id)}><Trash2 size={15} /></button>
+              </div>
             </div>
           ))}
         </div>
@@ -581,13 +593,14 @@ function StrengthLog({ entries, onAdd, onDelete }) {
   );
 }
 
-function StrengthForm({ onSave, onClose }) {
-  const [date, setDate] = useState(todayStr());
-  const [className, setClassName] = useState(CLASS_OPTIONS[0]);
-  const [lift, setLift] = useState(LIFTS[0]);
-  const [variation, setVariation] = useState(VARIATION_OPTIONS[LIFTS[0]][0]);
-  const [sets, setSets] = useState([{ weight: "", reps: "" }]);
-  const [notes, setNotes] = useState("");
+function StrengthForm({ initialEntry, onSave, onClose }) {
+  const isEdit = !!initialEntry;
+  const [date, setDate] = useState(initialEntry ? initialEntry.date : todayStr());
+  const [className, setClassName] = useState(initialEntry ? initialEntry.className : CLASS_OPTIONS[0]);
+  const [lift, setLift] = useState(initialEntry ? initialEntry.lift : LIFTS[0]);
+  const [variation, setVariation] = useState(initialEntry ? initialEntry.variation : VARIATION_OPTIONS[LIFTS[0]][0]);
+  const [sets, setSets] = useState(initialEntry ? initialEntry.sets.map((s) => ({ weight: String(s.weight), reps: String(s.reps) })) : [{ weight: "", reps: "" }]);
+  const [notes, setNotes] = useState(initialEntry ? (initialEntry.notes || "") : "");
 
   const handleLiftChange = (l) => {
     setLift(l);
@@ -610,14 +623,14 @@ function StrengthForm({ onSave, onClose }) {
   const handleSave = () => {
     const cleanSets = sets.filter((s) => s.weight && s.reps).map((s) => ({ weight: Number(s.weight), reps: Number(s.reps) }));
     if (!cleanSets.length) return;
-    onSave({ id: uid(), date, className, lift, variation, sets: cleanSets, notes });
+    onSave({ id: isEdit ? initialEntry.id : uid(), date, className, lift, variation, sets: cleanSets, notes });
   };
 
   return (
     <div className="pp-modal-overlay" onClick={onClose}>
       <div className="pp-modal" onClick={(e) => e.stopPropagation()}>
         <div className="pp-modal-header">
-          <h2><Dumbbell size={16} /> Log a strength session</h2>
+          <h2><Dumbbell size={16} /> {isEdit ? "Edit strength session" : "Log a strength session"}</h2>
           <button className="pp-icon-btn" onClick={onClose}><X size={18} /></button>
         </div>
         <div className="pp-modal-body">
@@ -657,7 +670,7 @@ function StrengthForm({ onSave, onClose }) {
         </div>
         <div className="pp-modal-footer">
           <button className="pp-btn" onClick={onClose}>Cancel</button>
-          <button className="pp-btn primary" disabled={!canSave} onClick={handleSave}>Save session</button>
+          <button className="pp-btn primary" disabled={!canSave} onClick={handleSave}>{isEdit ? "Save changes" : "Save session"}</button>
         </div>
       </div>
     </div>
@@ -668,7 +681,7 @@ function StrengthForm({ onSave, onClose }) {
    RUN LOG
    ====================================================================== */
 
-function RunLog({ entries, onAdd, onDelete }) {
+function RunLog({ entries, onAdd, onEdit, onDelete }) {
   const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
   return (
     <div className="pp-page">
@@ -702,7 +715,10 @@ function RunLog({ entries, onAdd, onDelete }) {
                   )}
                   {e.notes && <div className="pp-list-notes">{e.notes}</div>}
                 </div>
-                <button className="pp-icon-btn" onClick={() => onDelete(e.id)}><Trash2 size={15} /></button>
+                <div className="pp-list-actions">
+                  <button className="pp-icon-btn" onClick={() => onEdit(e)}><Pencil size={15} /></button>
+                  <button className="pp-icon-btn" onClick={() => onDelete(e.id)}><Trash2 size={15} /></button>
+                </div>
               </div>
             );
           })}
@@ -712,16 +728,22 @@ function RunLog({ entries, onAdd, onDelete }) {
   );
 }
 
-function RunForm({ onSave, onClose }) {
-  const [date, setDate] = useState(todayStr());
-  const [name, setName] = useState("");
-  const [type, setType] = useState("Easy");
-  const [distance, setDistance] = useState("");
-  const [duration, setDuration] = useState("");
-  const [laps, setLaps] = useState([{ distance: "", duration: "" }]);
-  const [avgHR, setAvgHR] = useState("");
-  const [maxHR, setMaxHR] = useState("");
-  const [notes, setNotes] = useState("");
+function RunForm({ initialEntry, onSave, onClose }) {
+  const isEdit = !!initialEntry;
+  const initialIsInterval = isEdit && !!(initialEntry.laps && initialEntry.laps.length > 0);
+  const [date, setDate] = useState(initialEntry ? initialEntry.date : todayStr());
+  const [name, setName] = useState(initialEntry ? (initialEntry.name || "") : "");
+  const [type, setType] = useState(initialEntry ? initialEntry.type : "Easy");
+  const [distance, setDistance] = useState(initialEntry && !initialIsInterval ? String(initialEntry.distance) : "");
+  const [duration, setDuration] = useState(initialEntry && !initialIsInterval ? fmtDuration(initialEntry.durationSec) : "");
+  const [laps, setLaps] = useState(
+    initialIsInterval
+      ? initialEntry.laps.map((l) => ({ distance: String(l.distanceM), duration: fmtDuration(l.durationSec) }))
+      : [{ distance: "", duration: "" }]
+  );
+  const [avgHR, setAvgHR] = useState(initialEntry && initialEntry.avgHR ? String(initialEntry.avgHR) : "");
+  const [maxHR, setMaxHR] = useState(initialEntry && initialEntry.maxHR ? String(initialEntry.maxHR) : "");
+  const [notes, setNotes] = useState(initialEntry ? (initialEntry.notes || "") : "");
 
   const isInterval = type === "Interval";
 
@@ -745,7 +767,7 @@ function RunForm({ onSave, onClose }) {
   const handleSave = () => {
     if (!canSave) return;
     onSave({
-      id: uid(), date, name, type,
+      id: isEdit ? initialEntry.id : uid(), date, name, type,
       distance: isInterval ? Math.round(lapTotalDistanceKm * 1000) / 1000 : Number(distance),
       durationSec: isInterval ? lapTotalDurationSec : durationSec,
       laps: isInterval ? cleanLaps : null,
@@ -757,7 +779,7 @@ function RunForm({ onSave, onClose }) {
     <div className="pp-modal-overlay" onClick={onClose}>
       <div className="pp-modal" onClick={(e) => e.stopPropagation()}>
         <div className="pp-modal-header">
-          <h2><Activity size={16} /> Log a run</h2>
+          <h2><Activity size={16} /> {isEdit ? "Edit run" : "Log a run"}</h2>
           <button className="pp-icon-btn" onClick={onClose}><X size={18} /></button>
         </div>
         <div className="pp-modal-body">
@@ -808,7 +830,7 @@ function RunForm({ onSave, onClose }) {
         </div>
         <div className="pp-modal-footer">
           <button className="pp-btn" onClick={onClose}>Cancel</button>
-          <button className="pp-btn primary" disabled={!canSave} onClick={handleSave}>Save run</button>
+          <button className="pp-btn primary" disabled={!canSave} onClick={handleSave}>{isEdit ? "Save changes" : "Save run"}</button>
         </div>
       </div>
     </div>
@@ -1154,6 +1176,7 @@ const CSS = `
 
 .pp-list { display: flex; flex-direction: column; gap: 8px; }
 .pp-list-item { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 13px 16px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.pp-list-actions { display: flex; gap: 2px; flex-shrink: 0; }
 .pp-list-main { min-width: 0; }
 .pp-list-top { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
 .pp-list-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; color: #14151A; text-transform: uppercase; letter-spacing: 0.02em; }
@@ -1201,31 +1224,31 @@ const CSS = `
 @media (max-width: 640px) {
   .pp-shell { flex-direction: column; }
   .pp-rail {
-    width: 100%; flex-direction: row; align-items: center; gap: 8px;
-    padding: 8px 10px; border-right: none; border-bottom: 1px solid var(--border);
+    width: 100%; flex-direction: column; gap: 0;
+    padding: 0; border-right: none; border-bottom: 1px solid var(--border);
     position: sticky; top: 0; z-index: 10; background: var(--panel);
-    overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none;
   }
-  .pp-rail::-webkit-scrollbar { display: none; }
+
+  .pp-rail-top { display: flex; align-items: center; gap: 6px; padding: 8px 10px 0; }
   .pp-brand { flex-shrink: 0; padding: 0; }
   .pp-brand-text { display: none; }
-  .pp-nav {
-    flex-direction: row; gap: 2px; flex: 1; overflow-x: auto;
-    -ms-overflow-style: none; scrollbar-width: none;
-  }
-  .pp-nav::-webkit-scrollbar { display: none; }
-  .pp-nav-btn { flex-direction: column; gap: 2px; padding: 6px 8px; font-size: 9.5px; white-space: nowrap; flex-shrink: 0; }
-  .pp-nav-btn span { font-size: 9.5px; }
+  .pp-nav { flex-direction: row; gap: 2px; flex: 1; width: 100%; }
+  .pp-nav-btn { flex: 1; flex-direction: column; gap: 2px; padding: 6px 2px; font-size: 8.5px; white-space: nowrap; }
+  .pp-nav-btn span { font-size: 8.5px; }
   .pp-nav-btn.active { box-shadow: inset 0 -2px 0 var(--red); }
 
+  .pp-rail-footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 6px 10px 8px; margin-top: 6px; border-top: 1px solid var(--border);
+  }
   .pp-data-actions { flex-direction: row; border-top: none; padding-top: 0; gap: 4px; flex-shrink: 0; }
   .pp-data-actions .pp-btn { width: auto; padding: 6px 7px; }
   .pp-data-actions .pp-btn span { display: none; }
 
-  .pp-countdown.compact { border-top: none; padding: 0; flex-shrink: 0; text-align: right; }
+  .pp-countdown.compact { border-top: none; padding: 0; flex: 1; text-align: left; }
   .pp-countdown.compact .pp-countdown-label { display: none; }
   .pp-countdown.compact .pp-countdown-date { display: none; }
-  .pp-countdown.compact .pp-countdown-digits { justify-content: flex-end; gap: 2px; margin-bottom: 0; }
+  .pp-countdown.compact .pp-countdown-digits { justify-content: flex-start; gap: 3px; margin-bottom: 0; }
   .pp-countdown.compact .pp-digit { font-size: 16px; padding: 2px 5px; }
 
   .pp-main { padding: 14px 14px 28px; }
