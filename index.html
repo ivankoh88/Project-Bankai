@@ -131,11 +131,26 @@ async function apiFetch(type) {
 // server-side (see doPost in paceplate-sheets-backend.gs).
 async function apiSend(payload) {
   try {
-    await fetch(SHEETS_API_URL, {
+    const res = await fetch(SHEETS_API_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
     });
+    if (!res.ok) {
+      console.error("Project Bankai: sync returned HTTP error", res.status, payload);
+      return false;
+    }
+    let json;
+    try {
+      json = await res.json();
+    } catch (parseErr) {
+      console.error("Project Bankai: sync response wasn't valid JSON (likely an Apps Script error page)", payload);
+      return false;
+    }
+    if (!json || json.ok !== true) {
+      console.error("Project Bankai: sync rejected by backend", json, payload);
+      return false;
+    }
     return true;
   } catch (e) {
     console.error("Project Bankai: failed to sync", payload, e);
@@ -172,12 +187,14 @@ function App() {
       .sort((a, b) => a.date.localeCompare(b.date));
     setStrength(next);
     setEditingStrength(null);
-    await apiSend({ type: "strength", action: isUpdate ? "update" : "create", entry });
+    const ok = await apiSend({ type: "strength", action: isUpdate ? "update" : "create", entry });
+    if (!ok) showMsg("Couldn't sync this lift to Google Sheets — it's showing here but may not be saved. Check your Apps Script deployment.", "alert");
   };
   const deleteStrength = async (id) => {
     const next = strength.filter((e) => e.id !== id);
     setStrength(next);
-    await apiSend({ type: "strength", action: "delete", id });
+    const ok = await apiSend({ type: "strength", action: "delete", id });
+    if (!ok) showMsg("Couldn't sync this deletion to Google Sheets — it may still exist there.", "alert");
   };
   const saveRun = async (entry) => {
     const isUpdate = runs.some((e) => e.id === entry.id);
@@ -185,12 +202,14 @@ function App() {
       .sort((a, b) => a.date.localeCompare(b.date));
     setRuns(next);
     setEditingRun(null);
-    await apiSend({ type: "runs", action: isUpdate ? "update" : "create", entry });
+    const ok = await apiSend({ type: "runs", action: isUpdate ? "update" : "create", entry });
+    if (!ok) showMsg("Couldn't sync this run to Google Sheets — it's showing here but may not be saved. Check your Apps Script deployment.", "alert");
   };
   const deleteRun = async (id) => {
     const next = runs.filter((e) => e.id !== id);
     setRuns(next);
-    await apiSend({ type: "runs", action: "delete", id });
+    const ok = await apiSend({ type: "runs", action: "delete", id });
+    if (!ok) showMsg("Couldn't sync this deletion to Google Sheets — it may still exist there.", "alert");
   };
 
   const showMsg = (text, tone = "good") => {
