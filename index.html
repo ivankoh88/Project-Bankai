@@ -114,11 +114,28 @@ const daysSince = (d) => Math.floor((new Date(new Date().toDateString()) - new D
 
 /* ------------------------------------ storage (Google Sheets backend) ------------------------------------ */
 
+// Normalizes a date value to a plain "yyyy-MM-dd" string. Handles both the
+// correct plain-string case and the case where Sheets/Apps Script hands back
+// a full ISO timestamp (e.g. "2026-07-31T16:00:00.000Z") — using the browser's
+// LOCAL date components (not a raw string slice) so a timezone offset doesn't
+// silently shift the date back a day.
+function normalizeDateStr(d) {
+  if (!d) return d;
+  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d; // already plain
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return d;
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, "0");
+  const day = String(dt.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 async function apiFetch(type) {
   try {
     const res = await fetch(`${SHEETS_API_URL}?type=${type}`);
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    const arr = Array.isArray(data) ? data : [];
+    return arr.map((entry) => ({ ...entry, date: normalizeDateStr(entry.date) }));
   } catch (e) {
     console.error("Project Bankai: failed to load", type, e);
     return [];
