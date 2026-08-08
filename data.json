@@ -1,0 +1,131 @@
+{
+  "wellness": [
+    {
+      "date": "2026-08-01",
+      "resting_hr": 123,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 76,
+      "body_battery_high": 91,
+      "stress_avg": null,
+      "steps": 11702,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-08-02",
+      "resting_hr": 129,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 76,
+      "body_battery_high": 90,
+      "stress_avg": 35,
+      "steps": 8064,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-08-03",
+      "resting_hr": null,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": null,
+      "body_battery_high": null,
+      "stress_avg": null,
+      "steps": null,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-08-04",
+      "resting_hr": 84,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 16,
+      "body_battery_high": 90,
+      "stress_avg": 31,
+      "steps": 13462,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-08-05",
+      "resting_hr": 76,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 82,
+      "body_battery_high": 82,
+      "stress_avg": null,
+      "steps": 454,
+      "training_readiness": null
+    }
+  ],
+  "activities": [
+    {
+      "id": 23805872739,
+      "name": "Singapore Running",
+      "type": "running",
+      "start_local": "2026-08-01 06:07:27",
+      "duration_seconds": 3497.958984375,
+      "distance_m": 8006.39013671875,
+      "calories": 583.0,
+      "avg_hr": 142.0,
+      "max_hr": 185.0,
+      "training_effect_aerobic": 3.0999999046325684,
+      "training_effect_anaerobic": 0.4000000059604645
+    },
+    {
+      "id": 23817819588,
+      "name": "Singapore Running",
+      "type": "running",
+      "start_local": "2026-08-02 06:28:47",
+      "duration_seconds": 1776.157958984375,
+      "distance_m": 5008.64013671875,
+      "calories": 375.0,
+      "avg_hr": 168.0,
+      "max_hr": 187.0,
+      "training_effect_aerobic": 3.4000000953674316,
+      "training_effect_anaerobic": 2.700000047683716
+    },
+    {
+      "id": 23842045771,
+      "name": "Treadmill Running",
+      "type": "treadmill_running",
+      "start_local": "2026-08-04 06:12:44",
+      "duration_seconds": 2826.68603515625,
+      "distance_m": 6000.0,
+      "calories": 409.0,
+      "avg_hr": 129.0,
+      "max_hr": 141.0,
+      "training_effect_aerobic": 2.200000047683716,
+      "training_effect_anaerobic": 0.0
+    },
+    {
+      "id": 23849504208,
+      "name": "Treadmill Running",
+      "type": "treadmill_running",
+      "start_local": "2026-08-04 21:39:19",
+      "duration_seconds": 1427.095947265625,
+      "distance_m": 5000.0,
+      "calories": 302.0,
+      "avg_hr": 158.0,
+      "max_hr": 168.0,
+      "training_effect_aerobic": 3.0999999046325684,
+      "training_effect_anaerobic": 0.0
+    },
+    {
+      "id": 23855382554,
+      "name": "Push Pull Lift",
+      "type": "other",
+      "start_local": "2026-08-05 06:40:12",
+      "duration_seconds": 1527.4449462890625,
+      "distance_m": 0.0,
+      "calories": 184.0,
+      "avg_hr": 118.0,
+      "max_hr": 155.0,
+      "training_effect_aerobic": 1.600000023841858,
+      "training_effect_anaerobic": 0.30000001192092896
+    }
+  ]
+}

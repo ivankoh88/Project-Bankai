@@ -75,9 +75,9 @@ const VARIATION_OPTIONS = {
 // Paste your deployed Google Apps Script Web App URL here (see paceplate-sheets-backend.gs)
 const SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbwXPitKjHqDXbGA_hZ6_euKaXFHZtVq0HUQ9sQSTKE2AZys2icuqsNh4ODFsZMvI43uXA/exec";
 
-// Garmin recovery data, synced daily by a separate GitHub Actions pipeline (garmin-ai repo).
-// Same GitHub Pages origin (ivankoh88.github.io) as this app, so this fetch needs no CORS setup.
-const GARMIN_DATA_URL = "https://ivankoh88.github.io/project-road-runner/data.json";
+// Garmin recovery data, synced daily by a separate GitHub Actions pipeline (garmin-ai repo),
+// which pushes data.json directly into this repo alongside index.html.
+const GARMIN_DATA_URL = "./data.json";
 
 /* ----------------------------------- helpers ------------------------------------ */
 
