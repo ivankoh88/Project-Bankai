@@ -49,6 +49,8 @@ const AlertCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="9" /><line x1
 const Trash2 = (p) => <Icon {...p}><path d="M4 7h16" /><path d="M9 7V4h6v3" /><path d="M6 7l1 13h10l1-13" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></Icon>;
 const Dumbbell = (p) => <Icon {...p}><path d="M4 12h16" /><path d="M4 9v6" /><path d="M20 9v6" /><path d="M7 7v10" /><path d="M17 7v10" /></Icon>;
 const Pencil = (p) => <Icon {...p}><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" /></Icon>;
+const Heart = (p) => <Icon {...p}><path d="M19 14c1.5-1.4 3-3.2 3-5.5A4.5 4.5 0 0 0 17.5 4c-1.7 0-3 .8-4.5 2.5C11.5 4.8 10.2 4 8.5 4A4.5 4.5 0 0 0 4 8.5c0 2.3 1.5 4.1 3 5.5l7 6.5z" /></Icon>;
+const Moon = (p) => <Icon {...p}><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" /></Icon>;
 
 
 /* ---------------------------------- constants ---------------------------------- */
@@ -72,6 +74,10 @@ const VARIATION_OPTIONS = {
 
 // Paste your deployed Google Apps Script Web App URL here (see paceplate-sheets-backend.gs)
 const SHEETS_API_URL = "https://script.google.com/macros/s/AKfycbwXPitKjHqDXbGA_hZ6_euKaXFHZtVq0HUQ9sQSTKE2AZys2icuqsNh4ODFsZMvI43uXA/exec";
+
+// Garmin recovery data, synced daily by a separate GitHub Actions pipeline (garmin-ai repo).
+// Same GitHub Pages origin (ivankoh88.github.io) as this app, so this fetch needs no CORS setup.
+const GARMIN_DATA_URL = "https://ivankoh88.github.io/project-road-runner/data.json";
 
 /* ----------------------------------- helpers ------------------------------------ */
 
@@ -183,11 +189,29 @@ function App() {
   const [tab, setTab] = useState("dashboard");
   const [strength, setStrength] = useState([]);
   const [runs, setRuns] = useState([]);
+  const [recovery, setRecovery] = useState({ wellness: [], activities: [] });
   const [ready, setReady] = useState(false);
   const [editingStrength, setEditingStrength] = useState(null); // null = closed; {} = new; entry = editing
   const [editingRun, setEditingRun] = useState(null);
   const [dataMsg, setDataMsg] = useState(null);
   const fileInputRef = React.useRef(null);
+
+  // Recovery data loads independently of strength/runs — a Garmin fetch failure
+  // shouldn't block the rest of the app from becoming ready.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(GARMIN_DATA_URL, { cache: "no-store" });
+        const data = await res.json();
+        setRecovery({
+          wellness: Array.isArray(data.wellness) ? data.wellness : [],
+          activities: Array.isArray(data.activities) ? data.activities : [],
+        });
+      } catch (e) {
+        console.error("Project Bankai: failed to load Garmin recovery data", e);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -288,6 +312,7 @@ function App() {
 
   const nav = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "recovery", label: "Recovery", icon: Heart },
     { id: "strength", label: "Strength Log", icon: Dumbbell },
     { id: "running", label: "Run Log", icon: Activity },
     { id: "progress", label: "Progression", icon: TrendingUp },
@@ -347,6 +372,9 @@ function App() {
             <>
               {tab === "dashboard" && (
                 <Dashboard strength={strength} runs={runs} onLogLift={() => setEditingStrength({})} onLogRun={() => setEditingRun({})} />
+              )}
+              {tab === "recovery" && (
+                <Recovery wellness={recovery.wellness} activities={recovery.activities} />
               )}
               {tab === "strength" && (
                 <StrengthLog entries={strength} onAdd={() => setEditingStrength({})} onEdit={(entry) => setEditingStrength(entry)} onDelete={deleteStrength} />
@@ -581,6 +609,174 @@ function PageHeader({ title, sub, actions }) {
         <p>{sub}</p>
       </div>
       {actions && <div className="pp-page-actions">{actions}</div>}
+    </div>
+  );
+}
+
+/* ======================================================================
+   RECOVERY (Garmin wellness data)
+   ====================================================================== */
+
+function latestNonNullRecovery(wellness, field) {
+  const sorted = [...wellness].sort((a, b) => b.date.localeCompare(a.date));
+  for (const row of sorted) {
+    if (row[field] !== null && row[field] !== undefined) return row;
+  }
+  return null;
+}
+
+const RECOVERY_KPIS = [
+  { label: "Resting HR", field: "resting_hr", unit: "bpm" },
+  { label: "HRV", field: "hrv_avg_ms", unit: "ms" },
+  { label: "Sleep", field: "sleep_seconds", unit: "h", fmt: (v) => (v / 3600).toFixed(1) },
+  { label: "Body battery", field: "body_battery_high", unit: "" },
+  { label: "Stress", field: "stress_avg", unit: "" },
+  { label: "Readiness", field: "training_readiness", unit: "" },
+  { label: "Steps", field: "steps", unit: "" },
+];
+
+function Recovery({ wellness, activities }) {
+  const chartData = useMemo(() => {
+    return [...wellness]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((d) => ({
+        label: fmtShort(d.date),
+        restingHR: d.resting_hr,
+        hrv: d.hrv_avg_ms,
+        sleepHours: d.sleep_seconds != null ? Math.round((d.sleep_seconds / 3600) * 10) / 10 : null,
+        battLow: d.body_battery_low,
+        battHigh: d.body_battery_high,
+        stress: d.stress_avg,
+        readiness: d.training_readiness,
+        steps: d.steps,
+      }));
+  }, [wellness]);
+
+  const recentActs = [...(activities || [])]
+    .sort((a, b) => (b.start_local || "").localeCompare(a.start_local || ""))
+    .slice(0, 5);
+
+  const hasData = wellness.length > 0;
+
+  return (
+    <div className="pp-page">
+      <PageHeader title="Recovery" sub="Garmin wellness data — sleep, HRV, resting HR, body battery, stress, and training readiness, synced automatically each morning." />
+
+      {!hasData ? (
+        <EmptyState icon={Heart} text="No Garmin recovery data synced yet — check back after the next morning sync." />
+      ) : (
+        <>
+          <div className="pp-grid pp-grid-stats">
+            {RECOVERY_KPIS.map(({ label, field, unit, fmt }) => {
+              const row = latestNonNullRecovery(wellness, field);
+              const val = row ? (fmt ? fmt(row[field]) : row[field]) : null;
+              return (
+                <div className="pp-stat" key={field}>
+                  <div className="pp-stat-val accent-teal">{val != null ? `${val}${unit ? " " + unit : ""}` : "–"}</div>
+                  <div className="pp-stat-label">{label}{row ? ` · ${fmtShort(row.date)}` : ""}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pp-card">
+            <div className="pp-card-title"><Heart size={15} /> Resting heart rate &amp; HRV</div>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="label" stroke="var(--dim)" fontSize={11} />
+                <YAxis stroke="var(--dim)" fontSize={11} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="restingHR" stroke="#FF4433" name="Resting HR (bpm)" connectNulls dot={{ r: 3 }} strokeWidth={2} />
+                <Line type="monotone" dataKey="hrv" stroke="#2FD9C4" name="HRV (ms)" connectNulls dot={{ r: 3 }} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="pp-card">
+            <div className="pp-card-title"><Moon size={15} /> Sleep (hours)</div>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="label" stroke="var(--dim)" fontSize={11} />
+                <YAxis stroke="var(--dim)" fontSize={11} unit="h" />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Line type="monotone" dataKey="sleepHours" stroke="#9B8CFF" name="Sleep (h)" connectNulls dot={{ r: 3 }} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="pp-card">
+            <div className="pp-card-title"><TrendingUp size={15} /> Body battery (low&ndash;high)</div>
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="label" stroke="var(--dim)" fontSize={11} />
+                <YAxis stroke="var(--dim)" fontSize={11} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="battLow" stroke="#8D909C" name="Low" connectNulls dot={false} strokeWidth={1.5} strokeDasharray="4 3" />
+                <Line type="monotone" dataKey="battHigh" stroke="#E8B33D" name="High" connectNulls dot={{ r: 3 }} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="pp-card">
+            <div className="pp-card-title"><AlertCircle size={15} /> Stress &amp; training readiness</div>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="label" stroke="var(--dim)" fontSize={11} />
+                <YAxis stroke="var(--dim)" fontSize={11} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="stress" stroke="#FF4433" name="Stress (avg)" connectNulls dot={{ r: 3 }} strokeWidth={2} />
+                <Line type="monotone" dataKey="readiness" stroke="#2FD9C4" name="Training readiness" connectNulls dot={{ r: 3 }} strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="pp-card">
+            <div className="pp-card-title"><Activity size={15} /> Steps</div>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="label" stroke="var(--dim)" fontSize={11} />
+                <YAxis stroke="var(--dim)" fontSize={11} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Bar dataKey="steps" fill="#2FD9C4" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {recentActs.length > 0 && (
+            <div className="pp-card">
+              <div className="pp-card-title"><Activity size={15} /> Recent Garmin activities</div>
+              <div className="pp-list">
+                {recentActs.map((a, i) => (
+                  <div className="pp-list-item" key={a.id || i}>
+                    <div className="pp-list-main">
+                      <div className="pp-list-top">
+                        <span className="pp-list-badge run">{a.type || "activity"}</span>
+                        <span className="pp-list-date">{(a.start_local || "").slice(0, 10)}</span>
+                      </div>
+                      <div className="pp-list-sets">
+                        {a.name}
+                        {a.distance_m ? ` · ${(a.distance_m / 1000).toFixed(2)}km` : ""}
+                        {a.duration_seconds ? ` · ${fmtDuration(a.duration_seconds)}` : ""}
+                        {a.avg_hr ? ` · ${Math.round(a.avg_hr)} bpm avg` : ""}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="pp-chart-note">Synced automatically from your Garmin watch each morning. Sleep and HRV only fill in on nights you actually wear the watch to bed.</div>
+        </>
+      )}
     </div>
   );
 }
