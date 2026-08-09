@@ -63,7 +63,6 @@ const RACES = [
   { name: "Hyrox Doubles #2", date: "2026-12-12" },
 ];
 const GOAL_PACE_SEC = 4 * 60 + 50; // 4:50/km
-const RUN_TYPES = ["Easy", "Tempo", "Threshold", "Interval", "Long", "Race"];
 const CLASS_OPTIONS = ["Move Total", "Move Upper", "Move Lower"];
 const CLASS_TO_LIFT = { "Move Total": "Deadlift", "Move Upper": "Bench Press", "Move Lower": "Squat" };
 const VARIATION_OPTIONS = {
@@ -87,25 +86,17 @@ const fmtDate = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-GB", { d
 const fmtShort = (d) => new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const daysUntil = (d) => Math.ceil((new Date(d + "T00:00:00") - new Date(new Date().toDateString())) / 86400000);
 
-function parsePaceToSec(str) {
-  if (!str) return null;
-  const parts = String(str).split(":").map(Number);
-  if (parts.some(isNaN)) return null;
-  return parts.length === 2 ? parts[0] * 60 + parts[1] : null;
-}
+// Garmin activities key off start_local ("2026-08-01 06:07:27"), not the plain
+// yyyy-MM-dd string every date helper above expects — these adapt it.
+const activityDate = (a) => (a && a.start_local ? a.start_local.slice(0, 10) : null);
+const activityDistanceKm = (a) => (a && a.distance_m ? a.distance_m / 1000 : 0);
+const activityPaceSec = (a) => (a && a.distance_m ? a.duration_seconds / (a.distance_m / 1000) : null);
+
 function secToPace(sec) {
   if (sec == null || isNaN(sec)) return "--:--";
   const m = Math.floor(sec / 60);
   const s = Math.round(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
-}
-function parseDurationToSec(str) {
-  if (!str) return null;
-  const parts = String(str).split(":").map(Number);
-  if (parts.some(isNaN)) return null;
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  if (parts.length === 2) return parts[0] * 60 + parts[1];
-  return null;
 }
 function fmtDuration(sec) {
   if (sec == null || isNaN(sec)) return "--";
@@ -188,11 +179,9 @@ async function apiSend(payload) {
 function App() {
   const [tab, setTab] = useState("dashboard");
   const [strength, setStrength] = useState([]);
-  const [runs, setRuns] = useState([]);
   const [recovery, setRecovery] = useState({ wellness: [], activities: [] });
   const [ready, setReady] = useState(false);
   const [editingStrength, setEditingStrength] = useState(null); // null = closed; {} = new; entry = editing
-  const [editingRun, setEditingRun] = useState(null);
   const [dataMsg, setDataMsg] = useState(null);
   const fileInputRef = React.useRef(null);
 
@@ -213,11 +202,36 @@ function App() {
     })();
   }, []);
 
+  // Sole source of truth for running data: Garmin activities, filtered to running
+  // types, capped at 60 days back, deduped by id (upstream sync already dedupes,
+  // this is a second safety net), newest first. Computed once here and shared by
+  // Dashboard, Run History, and Run Coach so the scoping logic never drifts.
+  const runningActivities = useMemo(() => {
+    const acts = Array.isArray(recovery.activities) ? recovery.activities : [];
+    const cutoff = new Date(new Date().toDateString());
+    cutoff.setDate(cutoff.getDate() - 60);
+    const seen = new Set();
+    return acts
+      .filter((a) => a && typeof a.type === "string" && /running/i.test(a.type))
+      .filter((a) => {
+        const ds = activityDate(a);
+        if (!ds) return false;
+        const d = new Date(ds + "T00:00:00");
+        return !isNaN(d) && d >= cutoff;
+      })
+      .filter((a) => {
+        if (a.id == null) return true;
+        if (seen.has(a.id)) return false;
+        seen.add(a.id);
+        return true;
+      })
+      .sort((a, b) => (b.start_local || "").localeCompare(a.start_local || ""));
+  }, [recovery.activities]);
+
   useEffect(() => {
     (async () => {
-      const [s, r] = await Promise.all([apiFetch("strength"), apiFetch("runs")]);
+      const s = await apiFetch("strength");
       setStrength(s.sort((a, b) => a.date.localeCompare(b.date)));
-      setRuns(r.sort((a, b) => a.date.localeCompare(b.date)));
       setReady(true);
     })();
   }, []);
@@ -237,22 +251,6 @@ function App() {
     const ok = await apiSend({ type: "strength", action: "delete", id });
     if (!ok) showMsg("Couldn't sync this deletion to Google Sheets — it may still exist there.", "alert");
   };
-  const saveRun = async (entry) => {
-    const isUpdate = runs.some((e) => e.id === entry.id);
-    const next = (isUpdate ? runs.map((e) => (e.id === entry.id ? entry : e)) : [...runs, entry])
-      .sort((a, b) => a.date.localeCompare(b.date));
-    setRuns(next);
-    setEditingRun(null);
-    const ok = await apiSend({ type: "runs", action: isUpdate ? "update" : "create", entry });
-    if (!ok) showMsg("Couldn't sync this run to Google Sheets — it's showing here but may not be saved. Check your Apps Script deployment.", "alert");
-  };
-  const deleteRun = async (id) => {
-    const next = runs.filter((e) => e.id !== id);
-    setRuns(next);
-    const ok = await apiSend({ type: "runs", action: "delete", id });
-    if (!ok) showMsg("Couldn't sync this deletion to Google Sheets — it may still exist there.", "alert");
-  };
-
   const showMsg = (text, tone = "good") => {
     setDataMsg({ text, tone });
     setTimeout(() => setDataMsg(null), 3500);
@@ -264,7 +262,6 @@ function App() {
         app: "project-bankai",
         exportedAt: new Date().toISOString(),
         strength,
-        runs,
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -293,18 +290,16 @@ function App() {
       const text = await file.text();
       const parsed = JSON.parse(text);
       const importedStrength = Array.isArray(parsed.strength) ? parsed.strength : null;
-      const importedRuns = Array.isArray(parsed.runs) ? parsed.runs : null;
-      if (!importedStrength || !importedRuns) {
+      if (!importedStrength) {
         showMsg("That file doesn't look like a Project Bankai backup.", "alert");
         return;
       }
+      // Older backups may still have a `runs` key — it's ignored, not rejected.
+      // Running data now comes solely from Garmin, so there's nothing to import it into.
       setStrength(importedStrength);
-      setRuns(importedRuns);
-      await Promise.all([
-        apiSend({ type: "strength", action: "replaceAll", entries: importedStrength }),
-        apiSend({ type: "runs", action: "replaceAll", entries: importedRuns }),
-      ]);
-      showMsg(`Imported ${importedStrength.length} strength session(s) and ${importedRuns.length} run(s).`, "good");
+      const ok = await apiSend({ type: "strength", action: "replaceAll", entries: importedStrength });
+      if (!ok) showMsg("Couldn't sync the import to Google Sheets — it's showing here but may not be saved.", "alert");
+      else showMsg(`Imported ${importedStrength.length} strength session(s).`, "good");
     } catch (e) {
       showMsg("Couldn't read that file — make sure it's a Project Bankai backup JSON.", "alert");
     }
@@ -314,9 +309,8 @@ function App() {
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "recovery", label: "Recovery", icon: Heart },
     { id: "strength", label: "Strength Log", icon: Dumbbell },
-    { id: "running", label: "Run Log", icon: Activity },
-    { id: "progress", label: "Progression", icon: TrendingUp },
-    { id: "coach", label: "Next Run", icon: Flag },
+    { id: "running", label: "Run History", icon: Activity },
+    { id: "coach", label: "Coach", icon: Flag },
   ];
 
   return (
@@ -371,7 +365,7 @@ function App() {
           ) : (
             <>
               {tab === "dashboard" && (
-                <Dashboard strength={strength} runs={runs} onLogLift={() => setEditingStrength({})} onLogRun={() => setEditingRun({})} />
+                <Dashboard strength={strength} runningActivities={runningActivities} onLogLift={() => setEditingStrength({})} />
               )}
               {tab === "recovery" && (
                 <Recovery wellness={recovery.wellness} activities={recovery.activities} />
@@ -380,17 +374,15 @@ function App() {
                 <StrengthLog entries={strength} onAdd={() => setEditingStrength({})} onEdit={(entry) => setEditingStrength(entry)} onDelete={deleteStrength} />
               )}
               {tab === "running" && (
-                <RunLog entries={runs} onAdd={() => setEditingRun({})} onEdit={(entry) => setEditingRun(entry)} onDelete={deleteRun} />
+                <RunHistory runningActivities={runningActivities} />
               )}
-              {tab === "progress" && <Progression strength={strength} runs={runs} />}
-              {tab === "coach" && <NextRunCoach runs={runs} strength={strength} />}
+              {tab === "coach" && <Coach runningActivities={runningActivities} strength={strength} />}
             </>
           )}
         </main>
       </div>
 
       {editingStrength && <StrengthForm initialEntry={editingStrength.id ? editingStrength : null} onSave={saveStrength} onClose={() => setEditingStrength(null)} />}
-      {editingRun && <RunForm initialEntry={editingRun.id ? editingRun : null} onSave={saveRun} onClose={() => setEditingRun(null)} />}
     </div>
   );
 }
@@ -449,20 +441,20 @@ function PaceRing({ paceSec, label }) {
    DASHBOARD
    ====================================================================== */
 
-function Dashboard({ strength, runs, onLogLift, onLogRun }) {
+function Dashboard({ strength, runningActivities, onLogLift }) {
   const now = new Date();
   const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
   const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
-  const inRange = (d, from) => new Date(d + "T00:00:00") >= from;
+  const inRange = (d, from) => d && new Date(d + "T00:00:00") >= from;
 
   const strengthWeek = strength.filter((e) => inRange(e.date, weekAgo));
-  const runsWeek = runs.filter((e) => inRange(e.date, weekAgo));
+  const runsWeek = runningActivities.filter((a) => inRange(activityDate(a), weekAgo));
   const strengthMonth = strength.filter((e) => inRange(e.date, monthAgo));
-  const runsMonth = runs.filter((e) => inRange(e.date, monthAgo));
-  const distWeek = runsWeek.reduce((s, r) => s + Number(r.distance || 0), 0);
-  const distMonth = runsMonth.reduce((s, r) => s + Number(r.distance || 0), 0);
-  const trainingDays = new Set([...strengthWeek.map((e) => e.date), ...runsWeek.map((e) => e.date)]).size;
-  const trainingDaysMonth = new Set([...strengthMonth.map((e) => e.date), ...runsMonth.map((e) => e.date)]).size;
+  const runsMonth = runningActivities.filter((a) => inRange(activityDate(a), monthAgo));
+  const distWeek = runsWeek.reduce((s, a) => s + activityDistanceKm(a), 0);
+  const distMonth = runsMonth.reduce((s, a) => s + activityDistanceKm(a), 0);
+  const trainingDays = new Set([...strengthWeek.map((e) => e.date), ...runsWeek.map(activityDate)]).size;
+  const trainingDaysMonth = new Set([...strengthMonth.map((e) => e.date), ...runsMonth.map(activityDate)]).size;
 
   const bestByLift = (lift) => {
     const entries = strength.filter((e) => e.lift === lift);
@@ -474,19 +466,19 @@ function Dashboard({ strength, runs, onLogLift, onLogRun }) {
     return entries[0] || null;
   };
 
-  const lastRun = [...runs].sort((a, b) => b.date.localeCompare(a.date))[0] || null;
-  const lastRunPace = lastRun && lastRun.distance ? (lastRun.durationSec / lastRun.distance) : null;
+  const lastRun = runningActivities[0] || null;
+  const lastRunPace = lastRun ? activityPaceSec(lastRun) : null;
 
-  const recentRuns = [...runs].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
-  const near5k = recentRuns.filter((r) => Math.abs(r.distance - 5) <= 1).sort((a, b) => (a.durationSec / a.distance) - (b.durationSec / b.distance))[0];
-  const near10k = recentRuns.filter((r) => Math.abs(r.distance - 10) <= 1.5).sort((a, b) => (a.durationSec / a.distance) - (b.durationSec / b.distance))[0];
+  const recentRuns = runningActivities.slice(0, 5);
+  const near5k = recentRuns.filter((a) => Math.abs(activityDistanceKm(a) - 5) <= 1).sort((a, b) => activityPaceSec(a) - activityPaceSec(b))[0];
+  const near10k = recentRuns.filter((a) => Math.abs(activityDistanceKm(a) - 10) <= 1.5).sort((a, b) => activityPaceSec(a) - activityPaceSec(b))[0];
 
   const lastStrengthDate = strength.length ? strength.map((e) => e.date).sort().slice(-1)[0] : null;
-  const lastRunDate = runs.length ? runs.map((e) => e.date).sort().slice(-1)[0] : null;
+  const lastRunDate = lastRun ? activityDate(lastRun) : null;
   const strengthGapDays = lastStrengthDate ? daysSince(lastStrengthDate) : null;
   const runGapDays = lastRunDate ? daysSince(lastRunDate) : null;
 
-  const summary = buildCoachingSummary({ strength, runs, lastRunPace, strengthGapDays, runGapDays });
+  const summary = buildCoachingSummary({ lastRunPace, strengthGapDays, runGapDays });
 
   return (
     <div className="pp-page">
@@ -494,10 +486,7 @@ function Dashboard({ strength, runs, onLogLift, onLogRun }) {
         title="Dashboard"
         sub="This week's snapshot, race clock, and where to focus next."
         actions={
-          <>
-            <button className="pp-btn primary" onClick={onLogLift}><Plus size={15} /> Log lift</button>
-            <button className="pp-btn primary" onClick={onLogRun}><Plus size={15} /> Log run</button>
-          </>
+          <button className="pp-btn primary" onClick={onLogLift}><Plus size={15} /> Log lift</button>
         }
       />
 
@@ -534,10 +523,10 @@ function Dashboard({ strength, runs, onLogLift, onLogRun }) {
         <div className="pp-card">
           <div className="pp-card-title"><Activity size={15} /> Running</div>
           <div className="pp-run-summary">
-            <div><span className="pp-kv-label">Latest run</span><span className="pp-kv-val">{lastRun ? `${lastRun.distance}km · ${secToPace(lastRunPace)}/km · ${fmtShort(lastRun.date)}` : "none logged"}</span></div>
+            <div><span className="pp-kv-label">Latest run</span><span className="pp-kv-val">{lastRun ? `${activityDistanceKm(lastRun).toFixed(2)}km · ${secToPace(lastRunPace)}/km · ${fmtShort(activityDate(lastRun))}` : "none synced yet"}</span></div>
             <div><span className="pp-kv-label">Monthly distance</span><span className="pp-kv-val">{distMonth.toFixed(1)} km</span></div>
-            <div><span className="pp-kv-label">Best 5k pace</span><span className="pp-kv-val">{near5k ? `${secToPace(near5k.durationSec / near5k.distance)}/km` : "no data"}</span></div>
-            <div><span className="pp-kv-label">Best 10k pace</span><span className="pp-kv-val">{near10k ? `${secToPace(near10k.durationSec / near10k.distance)}/km` : "no data"}</span></div>
+            <div><span className="pp-kv-label">Best 5k pace</span><span className="pp-kv-val">{near5k ? `${secToPace(activityPaceSec(near5k))}/km` : "no data"}</span></div>
+            <div><span className="pp-kv-label">Best 10k pace</span><span className="pp-kv-val">{near10k ? `${secToPace(activityPaceSec(near10k))}/km` : "no data"}</span></div>
           </div>
         </div>
 
@@ -570,7 +559,7 @@ function Dashboard({ strength, runs, onLogLift, onLogRun }) {
   );
 }
 
-function buildCoachingSummary({ strength, runs, lastRunPace, strengthGapDays, runGapDays }) {
+function buildCoachingSummary({ lastRunPace, strengthGapDays, runGapDays }) {
   const out = [];
   if (lastRunPace != null) {
     const diff = lastRunPace - GOAL_PACE_SEC;
@@ -909,315 +898,102 @@ function StrengthForm({ initialEntry, onSave, onClose }) {
   );
 }
 
+const TOOLTIP_STYLE = { background: "#1F232A", border: "1px solid #2B2E36", borderRadius: 8, fontSize: 12, color: "#ECEBE6" };
+
 /* ======================================================================
-   RUN LOG
+   RUN HISTORY (Garmin-sourced, read-only)
    ====================================================================== */
 
-function RunLog({ entries, onAdd, onEdit, onDelete }) {
-  const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+function RunHistory({ runningActivities }) {
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? runningActivities : runningActivities.slice(0, 5);
+  const remaining = runningActivities.length - shown.length;
+
   return (
     <div className="pp-page">
-      <PageHeader
-        title="Run Log"
-        sub="Distance, duration, pace, heart rate — one entry per run."
-        actions={<button className="pp-btn primary" onClick={onAdd}><Plus size={15} /> Log a run</button>}
-      />
-      {sorted.length === 0 ? (
-        <EmptyState icon={Activity} text="No runs logged yet. Log your first run to start tracking pace and progress toward 4:50/km." />
+      <PageHeader title="Run History" sub="Synced automatically from Garmin — outdoor and treadmill runs, last 60 days." />
+      {runningActivities.length === 0 ? (
+        <EmptyState icon={Activity} text="No running activities from Garmin in the last 60 days. Runs sync automatically each morning — lace up and this fills in on its own." />
       ) : (
-        <div className="pp-list">
-          {sorted.map((e) => {
-            const pace = e.distance ? e.durationSec / e.distance : null;
-            return (
-              <div className="pp-list-item" key={e.id}>
+        <div className="pp-card">
+          <div className="pp-card-title"><Activity size={15} /> Runs</div>
+          <div className="pp-list">
+            {shown.map((a, i) => (
+              <div className="pp-list-item" key={a.id || i}>
                 <div className="pp-list-main">
                   <div className="pp-list-top">
-                    <span className="pp-list-badge run">{e.type}</span>
-                    <span className="pp-list-date">{fmtDate(e.date)}</span>
-                    {e.name && <span className="pp-list-class">{e.name}</span>}
+                    <span className="pp-list-badge run">{a.type}</span>
+                    <span className="pp-list-date">{activityDate(a) ? fmtDate(activityDate(a)) : "unknown date"}</span>
+                    {a.name && <span className="pp-list-class">{a.name}</span>}
                   </div>
                   <div className="pp-list-sets">
-                    {e.distance}km · {fmtDuration(e.durationSec)} · {secToPace(pace)}/km
-                    {e.avgHR ? ` · ${e.avgHR} bpm avg` : ""}{e.maxHR ? ` (max ${e.maxHR})` : ""}
+                    {activityDistanceKm(a).toFixed(2)}km · {fmtDuration(a.duration_seconds)} · {secToPace(activityPaceSec(a))}/km
+                    {a.avg_hr ? ` · ${Math.round(a.avg_hr)} bpm avg` : ""}{a.max_hr ? ` (max ${Math.round(a.max_hr)})` : ""}
+                    {a.calories ? ` · ${Math.round(a.calories)} cal` : ""}
                   </div>
-                  {e.laps && e.laps.length > 0 && (
-                    <div className="pp-lap-breakdown">
-                      {e.laps.map((l, i) => `L${i + 1} ${l.distanceM}m/${fmtDuration(l.durationSec)}`).join("  ·  ")}
-                    </div>
-                  )}
-                  {e.notes && <div className="pp-list-notes">{e.notes}</div>}
-                </div>
-                <div className="pp-list-actions">
-                  <button className="pp-icon-btn" onClick={() => onEdit(e)}><Pencil size={15} /></button>
-                  <button className="pp-icon-btn" onClick={() => onDelete(e.id)}><Trash2 size={15} /></button>
                 </div>
               </div>
-            );
-          })}
+            ))}
+          </div>
+          {remaining > 0 && (
+            <button className="pp-btn ghost small" style={{ marginTop: 10 }} onClick={() => setShowAll(true)}>
+              View more ({remaining} more)
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function RunForm({ initialEntry, onSave, onClose }) {
-  const isEdit = !!initialEntry;
-  const initialIsInterval = isEdit && !!(initialEntry.laps && initialEntry.laps.length > 0);
-  const [date, setDate] = useState(initialEntry ? initialEntry.date : todayStr());
-  const [name, setName] = useState(initialEntry ? (initialEntry.name || "") : "");
-  const [type, setType] = useState(initialEntry ? initialEntry.type : "Easy");
-  const [distance, setDistance] = useState(initialEntry && !initialIsInterval ? String(initialEntry.distance) : "");
-  const [duration, setDuration] = useState(initialEntry && !initialIsInterval ? fmtDuration(initialEntry.durationSec) : "");
-  const [laps, setLaps] = useState(
-    initialIsInterval
-      ? initialEntry.laps.map((l) => ({ distance: String(l.distanceM), duration: fmtDuration(l.durationSec) }))
-      : [{ distance: "", duration: "" }]
-  );
-  const [avgHR, setAvgHR] = useState(initialEntry && initialEntry.avgHR ? String(initialEntry.avgHR) : "");
-  const [maxHR, setMaxHR] = useState(initialEntry && initialEntry.maxHR ? String(initialEntry.maxHR) : "");
-  const [notes, setNotes] = useState(initialEntry ? (initialEntry.notes || "") : "");
-
-  const isInterval = type === "Interval";
-
-  const updateLap = (i, field, val) => setLaps(laps.map((l, idx) => idx === i ? { ...l, [field]: val } : l));
-  const addLap = () => setLaps([...laps, { distance: "", duration: "" }]);
-  const removeLap = (i) => setLaps(laps.filter((_, idx) => idx !== i));
-
-  const cleanLaps = laps
-    .filter((l) => l.distance && l.duration)
-    .map((l) => ({ distanceM: Number(l.distance), durationSec: parseDurationToSec(l.duration) }))
-    .filter((l) => l.durationSec != null);
-
-  const lapTotalDistanceKm = cleanLaps.reduce((s, l) => s + l.distanceM, 0) / 1000;
-  const lapTotalDurationSec = cleanLaps.reduce((s, l) => s + l.durationSec, 0);
-
-  const durationSec = isInterval ? lapTotalDurationSec : parseDurationToSec(duration);
-  const effectiveDistance = isInterval ? lapTotalDistanceKm : Number(distance);
-  const pace = durationSec && effectiveDistance ? durationSec / effectiveDistance : null;
-  const canSave = isInterval ? cleanLaps.length > 0 : (distance && durationSec);
-
-  const handleSave = () => {
-    if (!canSave) return;
-    onSave({
-      id: isEdit ? initialEntry.id : uid(), date, name, type,
-      distance: isInterval ? Math.round(lapTotalDistanceKm * 1000) / 1000 : Number(distance),
-      durationSec: isInterval ? lapTotalDurationSec : durationSec,
-      laps: isInterval ? cleanLaps : null,
-      avgHR: avgHR ? Number(avgHR) : null, maxHR: maxHR ? Number(maxHR) : null, notes,
-    });
-  };
-
-  return (
-    <div className="pp-modal-overlay" onClick={onClose}>
-      <div className="pp-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="pp-modal-header">
-          <h2><Activity size={16} /> {isEdit ? "Edit run" : "Log a run"}</h2>
-          <button className="pp-icon-btn" onClick={onClose}><X size={18} /></button>
-        </div>
-        <div className="pp-modal-body">
-          <div className="pp-form-row">
-            <label>Date<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-            <label>Session type
-              <select value={type} onChange={(e) => setType(e.target.value)}>
-                {RUN_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </label>
-          </div>
-          <label className="pp-notes-label">Name / route<input type="text" placeholder="e.g. Sunday long run" value={name} onChange={(e) => setName(e.target.value)} /></label>
-
-          {isInterval ? (
-            <>
-              <div className="pp-sets-label">Laps</div>
-              {laps.map((l, i) => (
-                <div className="pp-set-row" key={i}>
-                  <span className="pp-lap-index">Lap {i + 1}</span>
-                  <input type="number" placeholder="distance (m)" value={l.distance} onChange={(e) => updateLap(i, "distance", e.target.value)} />
-                  <input type="text" placeholder="duration (mm:ss)" value={l.duration} onChange={(e) => updateLap(i, "duration", e.target.value)} />
-                  {laps.length > 1 && <button className="pp-icon-btn small" onClick={() => removeLap(i)}><X size={14} /></button>}
-                </div>
-              ))}
-              <button className="pp-btn ghost small" onClick={addLap}><Plus size={14} /> Add lap</button>
-              {cleanLaps.length > 0 && (
-                <div className="pp-pace-preview">
-                  {cleanLaps.length} laps · {(lapTotalDistanceKm).toFixed(2)}km total · {fmtDuration(lapTotalDurationSec)} · avg <strong>{secToPace(pace)}/km</strong>
-                  {pace <= GOAL_PACE_SEC ? " — at or under Hyrox target" : ` — ${Math.round(pace - GOAL_PACE_SEC)}s slower than 4:50/km target`}
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="pp-form-row">
-                <label>Distance (km)<input type="number" step="0.01" placeholder="e.g. 8.2" value={distance} onChange={(e) => setDistance(e.target.value)} /></label>
-                <label>Duration (mm:ss or h:mm:ss)<input type="text" placeholder="e.g. 42:30" value={duration} onChange={(e) => setDuration(e.target.value)} /></label>
-              </div>
-              {pace != null && <div className="pp-pace-preview">Average pace: <strong>{secToPace(pace)}/km</strong>{pace <= GOAL_PACE_SEC ? " — at or under Hyrox target" : ` — ${Math.round(pace - GOAL_PACE_SEC)}s slower than 4:50/km target`}</div>}
-            </>
-          )}
-
-          <div className="pp-form-row">
-            <label>Avg HR (optional)<input type="number" placeholder="bpm" value={avgHR} onChange={(e) => setAvgHR(e.target.value)} /></label>
-            <label>Max HR (optional)<input type="number" placeholder="bpm" value={maxHR} onChange={(e) => setMaxHR(e.target.value)} /></label>
-          </div>
-          <label className="pp-notes-label">Notes<textarea rows={2} placeholder="Effort, weather, how it felt (splits/laps if you have them)" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
-        </div>
-        <div className="pp-modal-footer">
-          <button className="pp-btn" onClick={onClose}>Cancel</button>
-          <button className="pp-btn primary" disabled={!canSave} onClick={handleSave}>{isEdit ? "Save changes" : "Save run"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ icon: Icon, text }) {
-  return (
-    <div className="pp-empty">
-      <Icon size={26} strokeWidth={1.5} />
-      <p>{text}</p>
-    </div>
-  );
-}
-
 /* ======================================================================
-   PROGRESSION (charts)
+   COACH (Run Coach + Strength Coach placeholder)
    ====================================================================== */
 
-function Progression({ strength, runs }) {
-  const oneRMData = useMemo(() => {
-    const byDate = {};
-    strength.forEach((e) => {
-      const v = Math.round(maxSetLoad(e));
-      if (!byDate[e.date]) byDate[e.date] = { date: e.date };
-      byDate[e.date][e.lift] = byDate[e.date][e.lift] ? Math.max(byDate[e.date][e.lift], v) : v;
-    });
-    return Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date)).map((d) => ({ ...d, label: fmtShort(d.date) }));
-  }, [strength]);
+const HARD_ANAEROBIC_TE = 2.5;
+function isHardRun(a) {
+  const te = a && a.training_effect_anaerobic;
+  const pace = activityPaceSec(a);
+  const teHard = typeof te === "number" && te >= HARD_ANAEROBIC_TE;
+  const paceHard = pace != null && pace <= GOAL_PACE_SEC;
+  return teHard || paceHard;
+}
 
-  const volumeData = useMemo(() => {
-    const byDate = {};
-    strength.forEach((e) => {
-      byDate[e.date] = (byDate[e.date] || 0) + volume(e);
-    });
-    return Object.entries(byDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, vol]) => ({ label: fmtShort(date), volume: vol }));
-  }, [strength]);
+const AFTER_RUN_NOTE = "This syncs from your watch automatically — nothing to log. Come back for your next prescription once it lands.";
 
-  const weeklyDistance = useMemo(() => {
-    const byWeek = {};
-    runs.forEach((r) => {
-      const d = new Date(r.date + "T00:00:00");
-      const monday = new Date(d); monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-      const key = monday.toISOString().slice(0, 10);
-      byWeek[key] = (byWeek[key] || 0) + Number(r.distance || 0);
-    });
-    return Object.entries(byWeek).sort(([a], [b]) => a.localeCompare(b)).map(([week, dist]) => ({ label: `wk ${fmtShort(week)}`, distance: Math.round(dist * 10) / 10 }));
-  }, [runs]);
-
-  const paceScatter = useMemo(() => {
-    return runs.filter((r) => r.distance).map((r) => ({
-      date: r.date, label: fmtShort(r.date),
-      pace: Math.round((r.durationSec / r.distance)),
-      type: r.type,
-    })).sort((a, b) => a.date.localeCompare(b.date));
-  }, [runs]);
-
-  const hasStrength = strength.length > 0;
-  const hasRuns = runs.length > 0;
-
+function Coach({ runningActivities, strength }) {
+  const [subTab, setSubTab] = useState("run");
   return (
     <div className="pp-page">
-      <PageHeader title="Progression" sub="Estimated 1RM, training volume, weekly distance, and pace trend." />
-
-      <div className="pp-card">
-        <div className="pp-card-title"><Dumbbell size={15} /> Estimated 1RM trend (Epley)</div>
-        {!hasStrength ? <EmptyState icon={Dumbbell} text="Log a few strength sessions to see your 1RM trend." /> : (
-          <ResponsiveContainer width="100%" height={230}>
-            <LineChart data={oneRMData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="label" stroke="var(--dim)" fontSize={11} />
-              <YAxis stroke="var(--dim)" fontSize={11} unit="kg" />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              {LIFTS.map((l) => <Line key={l} type="monotone" dataKey={l} stroke={LIFT_COLOR[l].replace("var(--", "").replace(")", "")} connectNulls name={l} dot={{ r: 3 }} strokeWidth={2} />)}
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+      <PageHeader title="Coach" sub="Run and strength coaching, built from your synced training data." />
+      <div className="pp-subnav">
+        <button className={"pp-subnav-btn" + (subTab === "run" ? " active" : "")} onClick={() => setSubTab("run")}>Run Coach</button>
+        <button className={"pp-subnav-btn" + (subTab === "strength" ? " active" : "")} onClick={() => setSubTab("strength")}>Strength Coach</button>
       </div>
-
-      <div className="pp-card">
-        <div className="pp-card-title"><TrendingUp size={15} /> Training volume per session (kg lifted)</div>
-        {!hasStrength ? <EmptyState icon={TrendingUp} text="No volume data yet." /> : (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={volumeData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="label" stroke="var(--dim)" fontSize={11} />
-              <YAxis stroke="var(--dim)" fontSize={11} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Bar dataKey="volume" fill="#E8B33D" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      <div className="pp-card">
-        <div className="pp-card-title"><Activity size={15} /> Weekly running distance</div>
-        {!hasRuns ? <EmptyState icon={Activity} text="No running data yet." /> : (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={weeklyDistance}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="label" stroke="var(--dim)" fontSize={11} />
-              <YAxis stroke="var(--dim)" fontSize={11} unit="km" />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Bar dataKey="distance" fill="#2FD9C4" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      <div className="pp-card">
-        <div className="pp-card-title"><Timer size={15} /> Pace trend vs 4:50/km Hyrox target</div>
-        {!hasRuns ? <EmptyState icon={Timer} text="No pace data yet." /> : (
-          <ResponsiveContainer width="100%" height={220}>
-            <ScatterChart>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="label" type="category" allowDuplicatedCategory={false} stroke="var(--dim)" fontSize={11} />
-              <YAxis dataKey="pace" reversed tickFormatter={secToPace} stroke="var(--dim)" fontSize={11} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => secToPace(v) + "/km"} />
-              <ReferenceLine y={GOAL_PACE_SEC} stroke="var(--teal)" strokeDasharray="4 4" label={{ value: "4:50 target", fill: "var(--teal)", fontSize: 11, position: "insideTopLeft" }} />
-              <Scatter data={paceScatter} fill="#FF4433" />
-            </ScatterChart>
-          </ResponsiveContainer>
-        )}
-        <div className="pp-chart-note">Lower on the chart = faster. Comparisons across very different session types (intervals vs long runs) should be read with care — they're not directly comparable.</div>
-      </div>
+      {subTab === "run"
+        ? <RunCoach runningActivities={runningActivities} strength={strength} />
+        : <StrengthCoachPlaceholder strength={strength} />}
     </div>
   );
 }
 
-const TOOLTIP_STYLE = { background: "#1F232A", border: "1px solid #2B2E36", borderRadius: 8, fontSize: 12, color: "#ECEBE6" };
-
-/* ======================================================================
-   NEXT RUN COACH
-   ====================================================================== */
-
-function NextRunCoach({ runs, strength }) {
-  const isHardRunType = (t) => t === "Interval" || t === "Tempo" || t === "Threshold" || t === "Race";
+function RunCoach({ runningActivities, strength }) {
   const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
 
-  const sortedRuns = [...runs].sort((a, b) => b.date.localeCompare(a.date));
-  const last = sortedRuns[0] || null;
-  const last3 = sortedRuns.slice(0, 3);
-  const last3Paces = last3.filter((r) => r.distance).map((r) => r.durationSec / r.distance);
+  const last = runningActivities[0] || null;
+  const last3 = runningActivities.slice(0, 3);
+  const last3Paces = last3.map(activityPaceSec).filter((p) => p != null);
   const avgRecentPace = last3Paces.length ? avg(last3Paces) : null;
-  const last3Summary = last3.map((r) => `${fmtShort(r.date)} ${secToPace(r.durationSec / r.distance)}/km`).join(", ");
+  const last3Summary = last3.map((a) => `${fmtShort(activityDate(a))} ${secToPace(activityPaceSec(a))}/km`).join(", ");
 
   const STRETCH_PACE_SEC = GOAL_PACE_SEC - 10; // 4:40/km — next tier once 4:50 is consistently beaten
 
   /* ---- weekly structure: how many hard sessions already this week? ---- */
-  const runsWeek = runs.filter((r) => daysSince(r.date) <= 7);
-  const hardRunsWeek = runsWeek.filter((r) => isHardRunType(r.type));
+  const runsWeek = runningActivities.filter((a) => daysSince(activityDate(a)) <= 7);
+  const hardRunsWeek = runsWeek.filter(isHardRun);
 
   /* ---- layoff detection ---- */
-  const lastRunGapDays = last ? daysSince(last.date) : null;
+  const lastRunGapDays = last ? daysSince(activityDate(last)) : null;
   const isLayoff = lastRunGapDays != null && lastRunGapDays >= 5;
 
   /* ---- cross-reference strength: recent heavy session? ---- */
@@ -1227,10 +1003,10 @@ function NextRunCoach({ runs, strength }) {
   const heavyStrengthRecent = lastStrength && strengthGapDays <= 1;
 
   /* ---- last-run hard-effort check (existing recovery trigger) ---- */
-  const lastWasHard = last && isHardRunType(last.type) && daysSince(last.date) <= 2;
+  const lastWasHard = last && isHardRun(last) && daysSince(activityDate(last)) <= 2;
 
   /* ---- pace trend: last 3 vs the 3 before that ---- */
-  const priorPaces = sortedRuns.slice(3, 6).filter((r) => r.distance).map((r) => r.durationSec / r.distance);
+  const priorPaces = runningActivities.slice(3, 6).map(activityPaceSec).filter((p) => p != null);
   const priorAvgPace = priorPaces.length ? avg(priorPaces) : null;
   let trend = null;
   if (avgRecentPace != null && priorAvgPace != null) {
@@ -1252,11 +1028,6 @@ function NextRunCoach({ runs, strength }) {
   }
   const phaseLabel = { base: "Base building", build: "Build", peak: "Peak/Sharpen", taper: "Taper" }[phase];
 
-  /* ---- notes-based caution flag ---- */
-  const painKeywords = ["pain", "sore", "hurt", "injur", "tight", "ache", "niggle"];
-  const lastNotesLower = last && last.notes ? last.notes.toLowerCase() : "";
-  const painFlag = last && painKeywords.some((k) => lastNotesLower.includes(k));
-
   /* ---- workout format rotation, to avoid prescribing the exact same session every time ---- */
   const intervalFormats = [
     { label: `6 × 1km @ {p}/km`, specifics: (p) => `Run 6 × 1km at ${p}/km pace, with 90 seconds easy jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`, dist: 8 },
@@ -1264,7 +1035,7 @@ function NextRunCoach({ runs, strength }) {
     { label: `8 × 400m hill reps`, specifics: (p) => `Run 8 × 400m hard uphill (aim for effort equivalent to ${p}/km on flat), jog back down for recovery. Warm up 1km easy first, cool down 1km easy after.`, dist: 6 },
     { label: `Progression run`, specifics: (p) => `Run 6km continuous: first 2km easy, middle 2km at ${p}/km, final 2km faster than ${p}/km if it feels controlled.`, dist: 6 },
   ];
-  const totalHardRunsLogged = runs.filter((r) => isHardRunType(r.type)).length;
+  const totalHardRunsLogged = runningActivities.filter(isHardRun).length;
   const format = intervalFormats[totalHardRunsLogged % intervalFormats.length];
 
   const trendNote = trend === "improving"
@@ -1277,48 +1048,36 @@ function NextRunCoach({ runs, strength }) {
 
   let rec;
 
-  if (painFlag) {
-    rec = {
-      objective: "Caution — back off",
-      specifics: "Run 3km at an easy, pain-free effort only. Stop early if anything feels off. Do not chase pace or distance today.",
-      distanceLine: "3 km easy, or rest if unsure",
-      why: `Your last logged run (${fmtShort(last.date)}) included a note flagging discomfort. Training through pain risks turning a minor issue into a real setback before Hyrox. If it persists beyond a couple of easy days, that's worth a physio or doctor's opinion, not another hard session.`,
-      record: "How it felt, and whether the discomfort is gone, unchanged, or worse.",
-    };
-  } else if (runs.length < 3) {
+  if (runningActivities.length < 3) {
     rec = {
       objective: "Build a baseline",
       specifics: "Run 5km at a controlled, comfortable effort — don't chase pace yet.",
       distanceLine: "5 km, no pace target",
-      why: `Only ${runs.length} run(s) logged so far — not enough history to prescribe a pace yet. This run establishes that baseline; from your next 3 runs onward, I'll prescribe an exact pace and distance.`,
-      record: "Distance, duration, and how the effort felt.",
+      why: `Only ${runningActivities.length} run(s) synced from Garmin so far — not enough history to prescribe a pace yet. This run establishes that baseline; from your next 3 runs onward, I'll prescribe an exact pace and distance.`,
     };
   } else if (isLayoff) {
     rec = {
       objective: "Reintroduction run",
       specifics: "Run 4km at an easy, conversational effort. Ignore pace completely today.",
       distanceLine: "4 km easy",
-      why: `It's been ${lastRunGapDays} days since your last logged run. Picking up where your old pace data left off would risk injury — this session rebuilds the habit and checks how your legs respond before any quality work resumes.`,
-      record: "Distance, duration, and how your legs felt — any tightness or soreness.",
+      why: `It's been ${lastRunGapDays} days since your last synced run. Picking up where your old pace data left off would risk injury — this session rebuilds the habit and checks how your legs respond before any quality work resumes.`,
     };
   } else if (lastWasHard || heavyStrengthRecent) {
     const reasons = [];
-    if (lastWasHard) reasons.push(`your last run (${last.type}, ${fmtShort(last.date)}) was high-intensity within the last 2 days`);
+    if (lastWasHard) reasons.push(`your last run (${fmtShort(activityDate(last))}, ${secToPace(activityPaceSec(last))}/km) was high-intensity within the last 2 days`);
     if (heavyStrengthRecent) reasons.push(`you logged a ${lastStrength.lift} session ${strengthGapDays === 0 ? "today" : "yesterday"}`);
     rec = {
       objective: "Recovery run",
       specifics: "Run 4km easy. Do not watch pace on this one — effort only.",
       distanceLine: "4 km easy",
       why: `${reasons.join(" and ")}. This session is mandatory recovery, not optional — running hard again today would blunt tomorrow's quality and stack fatigue on top of lifting load.`,
-      record: "Duration and how recovered you felt.",
     };
   } else if (hardRunsWeek.length >= 2) {
     rec = {
       objective: "Easy or long run — protect the week",
       specifics: "Run 7km at a comfortable, conversational pace. No pace target today.",
       distanceLine: "7 km easy",
-      why: `You've already logged ${hardRunsWeek.length} hard running sessions this week. A third would risk overtraining rather than building fitness — a coach caps quality sessions at 2 per week and fills the rest with easy aerobic volume.`,
-      record: "Distance, duration, and overall fatigue level.",
+      why: `You've already run ${hardRunsWeek.length} hard sessions this week. A third would risk overtraining rather than building fitness — a coach caps quality sessions at 2 per week and fills the rest with easy aerobic volume.`,
     };
   } else if (phase === "taper") {
     rec = {
@@ -1326,7 +1085,6 @@ function NextRunCoach({ runs, strength }) {
       specifics: `Run 3 × 1km at ${secToPace(GOAL_PACE_SEC)}/km with full recovery between reps, then stop. This is about staying sharp, not building fitness.`,
       distanceLine: `5 km total @ ${secToPace(GOAL_PACE_SEC)}/km on the reps`,
       why: `You're ${daysToRace} days out from ${nextRace.name}. This is taper territory — training load drops so you arrive fresh, but short race-pace touches keep your legs primed. Resist the urge to do more; fitness built this week won't show up on race day, but fatigue will.`,
-      record: "How the goal pace felt — it should feel noticeably easier than in training weeks.",
     };
   } else if (avgRecentPace && avgRecentPace > GOAL_PACE_SEC + 15) {
     const paceStr = secToPace(GOAL_PACE_SEC);
@@ -1336,7 +1094,6 @@ function NextRunCoach({ runs, strength }) {
       specifics: format.specifics(paceStr),
       distanceLine: `${format.dist} km total @ ${paceStr}/km on the reps`,
       why: `Your last 3 runs (${last3Summary}) averaged ${secToPace(avgRecentPace)}/km — ${Math.round(avgRecentPace - GOAL_PACE_SEC)}s slower than the ${paceStr}/km target you need across all 8 Hyrox rounds. Broken reps at target pace close that gap without the fatigue cost of a continuous effort at the same speed.${volumeNote}${trendNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
-      record: "Pace for every rep, and whether the later reps held pace or faded.",
     };
   } else if (avgRecentPace && avgRecentPace > GOAL_PACE_SEC) {
     rec = {
@@ -1344,7 +1101,6 @@ function NextRunCoach({ runs, strength }) {
       specifics: `Run 6km continuously at ${secToPace(GOAL_PACE_SEC)}/km pace — no walk breaks, no easing off after halfway.`,
       distanceLine: `6 km @ ${secToPace(GOAL_PACE_SEC)}/km`,
       why: `Your last 3 runs (${last3Summary}) averaged ${secToPace(avgRecentPace)}/km — close to target but not there continuously. You've done the broken-rep work; now prove you can hold ${secToPace(GOAL_PACE_SEC)}/km for a full sustained effort, which is what race day actually demands.${trendNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
-      record: "Pace at each kilometre split, and RPE at the finish.",
     };
   } else {
     rec = {
@@ -1352,21 +1108,18 @@ function NextRunCoach({ runs, strength }) {
       specifics: `Run 5 × 1km at ${secToPace(STRETCH_PACE_SEC)}/km pace, with 90 seconds jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`,
       distanceLine: `7 km total @ ${secToPace(STRETCH_PACE_SEC)}/km on the reps`,
       why: `Your last 3 runs (${last3Summary}) averaged ${secToPace(avgRecentPace)}/km — already at or under your ${secToPace(GOAL_PACE_SEC)}/km target. Sitting at that pace won't make you faster. The new target is ${secToPace(STRETCH_PACE_SEC)}/km.${trendNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
-      record: "Pace for every rep, and whether you could have held one more.",
     };
   }
 
-  const last7dDist = runs.filter((r) => daysSince(r.date) <= 7).reduce((s, r) => s + Number(r.distance || 0), 0);
+  const last7dDist = runningActivities.filter((a) => daysSince(activityDate(a)) <= 7).reduce((s, a) => s + activityDistanceKm(a), 0);
 
   return (
-    <div className="pp-page">
-      <PageHeader title="Next Run" sub="Your prescribed session — built from your run history, lifting load, race calendar, and recent trend." />
-
+    <>
       <div className="pp-card pp-context-card">
         <div className="pp-card-title"><Flag size={15} /> Training Context</div>
         <ul className="pp-coach-list">
           <li><span className="pp-tag priority">PHASE</span>{phaseLabel}{daysToRace != null ? ` — ${daysToRace} days to ${nextRace.name}` : " — no upcoming race scheduled"}</li>
-          <li><span className={"pp-tag " + (hardRunsWeek.length >= 2 ? "alert" : "good")}>THIS WEEK</span>{hardRunsWeek.length} hard running session{hardRunsWeek.length === 1 ? "" : "s"} logged so far</li>
+          <li><span className={"pp-tag " + (hardRunsWeek.length >= 2 ? "alert" : "good")}>THIS WEEK</span>{hardRunsWeek.length} hard running session{hardRunsWeek.length === 1 ? "" : "s"} this week</li>
           {trend && (
             <li><span className={"pp-tag " + (trend === "improving" ? "good" : trend === "declining" ? "alert" : "warn")}>TREND</span>Pace is {trend} over your last 6 runs</li>
           )}
@@ -1388,11 +1141,23 @@ function NextRunCoach({ runs, strength }) {
           <div>{rec.why}</div>
         </div>
         <div className="pp-rec-block">
-          <div className="pp-rec-label">What to record afterward</div>
-          <div>{rec.record}</div>
+          <div className="pp-rec-label">After this run</div>
+          <div>{AFTER_RUN_NOTE}</div>
         </div>
-        <div className="pp-rec-footnote">Last 7 days: {last7dDist.toFixed(1)}km logged. REVL strength/cardio classes provide the rest of your conditioning load — this prescription cross-checks your logged lifting sessions where relevant.</div>
+        <div className="pp-rec-footnote">Last 7 days: {last7dDist.toFixed(1)}km synced. REVL strength/cardio classes provide the rest of your conditioning load — this prescription cross-checks your logged lifting sessions where relevant.</div>
       </div>
+    </>
+  );
+}
+
+function StrengthCoachPlaceholder({ strength }) {
+  const n = strength.length;
+  return (
+    <div className="pp-card">
+      <EmptyState
+        icon={Dumbbell}
+        text={`Strength Coach is coming in a future update. You've logged ${n} strength session${n === 1 ? "" : "s"} so far — that history will feed the recommendations once this ships.`}
+      />
     </div>
   );
 }
@@ -1453,6 +1218,11 @@ const CSS = `
 .pp-page-header h1 { font-size: 24px; }
 .pp-page-header p { color: var(--dim); font-size: 13px; margin: 4px 0 0; }
 .pp-page-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.pp-subnav { display: inline-flex; gap: 3px; background: var(--panel2); border: 1px solid var(--border); border-radius: 9px; padding: 3px; margin-bottom: 18px; }
+.pp-subnav-btn { padding: 7px 14px; border-radius: 6px; border: none; background: transparent; color: var(--dim); font-size: 12.5px; font-family: 'Inter', sans-serif; font-weight: 500; cursor: pointer; }
+.pp-subnav-btn:hover { color: var(--text); }
+.pp-subnav-btn.active { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
 .pp-btn {
   display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 7px;
@@ -1537,9 +1307,6 @@ const CSS = `
 .pp-variation { font-family: 'Inter', sans-serif; color: var(--dim); }
 .pp-list-derived { font-family: 'Inter', sans-serif; color: var(--dim); font-size: 12px; }
 .pp-list-notes { font-size: 12px; color: var(--dim); margin-top: 5px; font-style: italic; }
-.pp-lap-breakdown { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--dim); margin-top: 5px; }
-.pp-lap-index { font-size: 11px; color: var(--dim); width: 42px; flex-shrink: 0; }
-
 .pp-empty { text-align: center; padding: 50px 20px; color: var(--dim); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .pp-empty p { max-width: 320px; font-size: 13px; margin: 0; }
 
@@ -1559,7 +1326,6 @@ const CSS = `
 .pp-set-row { display: flex; align-items: center; gap: 7px; }
 .pp-set-row input { background: #0D0E11; border: 1px solid var(--border); border-radius: 6px; padding: 8px 9px; color: var(--text); font-size: 13px; flex: 1; width: 0; }
 .pp-x { color: var(--dim); }
-.pp-pace-preview { font-size: 12.5px; background: var(--panel2); border-radius: 7px; padding: 8px 10px; }
 
 .pp-rec-card { max-width: 620px; }
 .pp-rec-objective { font-family: 'Oswald', sans-serif; text-transform: uppercase; font-size: 18px; letter-spacing: 0.02em; color: var(--red); margin-bottom: 10px; }
