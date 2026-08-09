@@ -94,8 +94,12 @@ const activityPaceSec = (a) => (a && a.distance_m ? a.duration_seconds / (a.dist
 
 function secToPace(sec) {
   if (sec == null || isNaN(sec)) return "--:--";
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
+  // Round the total first, then split — rounding minutes/seconds separately can
+  // carry a rounded-up 60s into the wrong minute (e.g. "5:60" instead of "6:00"),
+  // which only shows up with fractional-second data like Garmin's.
+  const total = Math.round(sec);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 function fmtDuration(sec) {
@@ -575,7 +579,7 @@ function buildCoachingSummary({ lastRunPace, strengthGapDays, runGapDays }) {
     out.push({ tag: "CONSISTENCY", tone: "warn", text: `${strengthGapDays} days since a strength session was logged — fine if REVL classes are still happening, just log them to keep PB tracking accurate.` });
   }
   const priority = lastRunPace != null && lastRunPace > GOAL_PACE_SEC
-    ? "Highest priority: a pace-focused session at or near 4:50/km this week (see Next Run tab) to close the gap before race day."
+    ? "Highest priority: a pace-focused session at or near 4:50/km this week (see the Coach tab) to close the gap before race day."
     : "Highest priority: keep the current running consistency — protect it from REVL fatigue by keeping midweek runs easy.";
   out.push({ tag: "PRIORITY", tone: "priority", text: priority });
   return out;
