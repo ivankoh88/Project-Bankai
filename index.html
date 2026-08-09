@@ -1054,6 +1054,20 @@ function RunCoach({ runningActivities, strength, wellness }) {
 
   const STRETCH_PACE_SEC = GOAL_PACE_SEC - 10; // 4:40/km — next tier once 4:50 is consistently beaten
 
+  /* ---- ideal easy-effort pace: anchored to your own recent easy runs where you have ---- */
+  /* ---- them, otherwise a standard easy-day offset off goal pace ---- */
+  const recentEasyPaces = runningActivities
+    .filter((a) => !isHardRun(a))
+    .slice(0, 6)
+    .map(activityPaceSec)
+    .filter((p) => p != null);
+  const historicalEasyPace = recentEasyPaces.length ? avg(recentEasyPaces) : null;
+  const EASY_BUFFER_SEC = 75; // ~1:15/km slower than goal pace is a standard easy-day offset
+  const easyPaceSec = historicalEasyPace != null
+    ? Math.max(historicalEasyPace, GOAL_PACE_SEC + 45)
+    : GOAL_PACE_SEC + EASY_BUFFER_SEC;
+  const EASY_PACE_LABEL = `${secToPace(easyPaceSec)}/km or slower — easy, conversational effort`;
+
   /* ---- weekly structure: how many hard sessions already this week? ---- */
   const runsWeek = runningActivities.filter((a) => daysSince(activityDate(a)) <= 7);
   const hardRunsWeek = runsWeek.filter(isHardRun);
@@ -1162,6 +1176,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: "Rest day — listen to your body first",
       specifics: "No run today. Rest, hydrate, and get a full night's sleep if you can.",
       distanceLine: "Rest — no run prescribed",
+      targetPace: null,
       why: `${reasonText.charAt(0).toUpperCase()}${reasonText.slice(1)}. A signal like this is usually your body flagging something — illness, dehydration, poor sleep, or accumulated fatigue — before it shows up as a bad workout. Training through it risks digging the hole deeper. If it persists beyond a day or two, that's worth a doctor's opinion rather than pushing through.`,
     };
   } else if (runningActivities.length < 3) {
@@ -1169,6 +1184,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: "Build a baseline",
       specifics: "Run 5km at a controlled, comfortable effort — don't chase pace yet.",
       distanceLine: "5 km, no pace target",
+      targetPace: `Around ${secToPace(easyPaceSec)}/km or slower — a comfortable starting point, not something to chase yet`,
       why: `Only ${runningActivities.length} run(s) synced from Garmin so far — not enough history to prescribe a pace yet. This run establishes that baseline; from your next 3 runs onward, I'll prescribe an exact pace and distance.`,
     };
   } else if (isLayoff) {
@@ -1176,6 +1192,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: "Reintroduction run",
       specifics: "Run 4km at an easy, conversational effort. Ignore pace completely today.",
       distanceLine: "4 km easy",
+      targetPace: EASY_PACE_LABEL,
       why: `It's been ${lastRunGapDays} days since your last synced run. Picking up where your old pace data left off would risk injury — this session rebuilds the habit and checks how your legs respond before any quality work resumes.`,
     };
   } else if (acwr != null && acwr > 1.5) {
@@ -1183,6 +1200,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: "Cut volume — injury-risk zone",
       specifics: "Run 4km easy, or take the day off if anything feels off.",
       distanceLine: "4 km easy, or rest",
+      targetPace: EASY_PACE_LABEL,
       why: `Your acute:chronic workload ratio is ${acwr.toFixed(2)} — ${vol7.toFixed(1)}km in the last 7 days against a ${chronicWeekly.toFixed(1)}km/week average over the last month. Ratios above 1.5 are where the injury-risk research gets consistent — your body hasn't adapted to this volume yet. Backing off for a few days protects the fitness you've already built rather than risking a setback that costs weeks.`,
     };
   } else if (lastWasHard || heavyStrengthRecent) {
@@ -1193,6 +1211,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: "Recovery run",
       specifics: "Run 4km easy. Do not watch pace on this one — effort only.",
       distanceLine: "4 km easy",
+      targetPace: EASY_PACE_LABEL,
       why: `${reasons.join(" and ")}. This session is mandatory recovery, not optional — running hard again today would blunt tomorrow's quality and stack fatigue on top of lifting load.`,
     };
   } else if (hardRunsWeek.length >= 2) {
@@ -1200,6 +1219,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: "Easy or long run — protect the week",
       specifics: "Run 7km at a comfortable, conversational pace. No pace target today.",
       distanceLine: "7 km easy",
+      targetPace: EASY_PACE_LABEL,
       why: `You've already run ${hardRunsWeek.length} hard sessions this week. A third would risk overtraining rather than building fitness — a coach caps quality sessions at 2 per week and fills the rest with easy aerobic volume.`,
     };
   } else if (phase === "taper") {
@@ -1208,6 +1228,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: `Taper touch — ${daysToRace} days to ${nextRace.name}`,
       specifics: `Run 3 × 1km at ${secToPace(GOAL_PACE_SEC)}/km with full recovery between reps, then stop. This is about staying sharp, not building fitness.`,
       distanceLine: `5 km total @ ${secToPace(GOAL_PACE_SEC)}/km on the reps`,
+      targetPace: `${secToPace(GOAL_PACE_SEC)}/km — goal race pace`,
       why: `You're ${daysToRace} days out from ${nextRace.name}. This is taper territory — training load drops so you arrive fresh, but short race-pace touches keep your legs primed. Resist the urge to do more; fitness built this week won't show up on race day, but fatigue will.`,
     };
   } else if (toughLoveTrigger) {
@@ -1215,6 +1236,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: "Rebuild the habit — consistency over pace",
       specifics: "Run 4-5km at an easy, no-pressure effort. The only goal today is showing up.",
       distanceLine: "4-5 km easy",
+      targetPace: EASY_PACE_LABEL,
       why: `You've run ${weekCounts[0] + weekCounts[1]} time(s) in the last two weeks. That's not enough training stimulus for pace work to matter yet — chasing ${secToPace(GOAL_PACE_SEC)}/km off an inconsistent base builds neither fitness nor confidence. The fix isn't one heroic session; it's showing up again this week and next. Once you've strung together a couple of consistent weeks, pace work comes back on the table.`,
     };
   } else if (avgRecentPace && avgRecentPace > GOAL_PACE_SEC + 15) {
@@ -1225,6 +1247,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: `Interval work at ${paceStr}/km`,
       specifics: format.specifics(paceStr),
       distanceLine: `${format.dist} km total @ ${paceStr}/km on the reps`,
+      targetPace: `${paceStr}/km on the reps — goal race pace`,
       why: `Your last 3 runs (${last3Summary}) averaged ${secToPace(avgRecentPace)}/km — ${Math.round(avgRecentPace - GOAL_PACE_SEC)}s slower than the ${paceStr}/km target you need across all 8 Hyrox rounds. Broken reps at target pace close that gap without the fatigue cost of a continuous effort at the same speed.${volumeNote}${trendNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
     };
   } else if (avgRecentPace && avgRecentPace > GOAL_PACE_SEC) {
@@ -1233,6 +1256,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: `Hold ${secToPace(GOAL_PACE_SEC)}/km continuously`,
       specifics: `Run 6km continuously at ${secToPace(GOAL_PACE_SEC)}/km pace — no walk breaks, no easing off after halfway.`,
       distanceLine: `6 km @ ${secToPace(GOAL_PACE_SEC)}/km`,
+      targetPace: `${secToPace(GOAL_PACE_SEC)}/km — goal race pace, held continuously`,
       why: `Your last 3 runs (${last3Summary}) averaged ${secToPace(avgRecentPace)}/km — close to target but not there continuously. You've done the broken-rep work; now prove you can hold ${secToPace(GOAL_PACE_SEC)}/km for a full sustained effort, which is what race day actually demands.${trendNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
     };
   } else {
@@ -1241,6 +1265,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: `Push past target — ${secToPace(STRETCH_PACE_SEC)}/km`,
       specifics: `Run 5 × 1km at ${secToPace(STRETCH_PACE_SEC)}/km pace, with 90 seconds jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`,
       distanceLine: `7 km total @ ${secToPace(STRETCH_PACE_SEC)}/km on the reps`,
+      targetPace: `${secToPace(STRETCH_PACE_SEC)}/km on the reps — faster than goal pace, since you're consistently beating it now`,
       why: `Your last 3 runs (${last3Summary}) averaged ${secToPace(avgRecentPace)}/km — already at or under your ${secToPace(GOAL_PACE_SEC)}/km target. Sitting at that pace won't make you faster. The new target is ${secToPace(STRETCH_PACE_SEC)}/km.${trendNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
     };
   }
@@ -1251,6 +1276,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       objective: "Easy shakeout — REVL conditioning day",
       specifics: `Run 3-4km at an easy, conversational effort, or skip the run entirely if REVL conditioning is on today. Save the quality work (${original.objective}) for tomorrow or another non-REVL day.`,
       distanceLine: "3-4 km easy, or rest",
+      targetPace: EASY_PACE_LABEL,
       why: `Tuesdays and Thursdays are reserved for REVL conditioning in your schedule — stacking a hard run on top of that class risks the same compounding fatigue as two hard sessions back to back. ${original.objective} is still the right next session — it's just better placed on a day without conditioning class competing for the same energy system.`,
     };
   }
@@ -1259,13 +1285,15 @@ function RunCoach({ runningActivities, strength, wellness }) {
     <>
       <div className="pp-card">
         <div className="pp-card-title"><TrendingUp size={15} /> Fitness Summary</div>
-        <div className="pp-grid pp-grid-stats" style={{ gridTemplateColumns: "repeat(3, 1fr)", marginBottom: 14 }}>
+        <div className="pp-grid pp-grid-stats" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginBottom: 14 }}>
           <StatBlock value={`${vol7.toFixed(1)} km`} label="this week" accent="teal" />
           <StatBlock value={`${chronicWeekly.toFixed(1)} km`} label="4-week avg" accent="teal" />
-          <StatBlock value={`${weeksWithRun}/4`} label="weeks run" accent={weeksWithRun >= 3 ? "teal" : weeksWithRun === 2 ? "gold" : "red"} />
         </div>
         <div className="pp-run-summary">
           <div><span className="pp-kv-label">Recommended next run</span><span className="pp-kv-val">{rec.objective}</span></div>
+          {rec.targetPace && (
+            <div><span className="pp-kv-label">Ideal pace</span><span className="pp-kv-val">{rec.targetPace}</span></div>
+          )}
           <div>
             <span className="pp-kv-label">Why</span>
             <div style={{ fontSize: 13, marginTop: 2, lineHeight: 1.5 }}>{rec.why}</div>
@@ -1313,6 +1341,12 @@ function RunCoach({ runningActivities, strength, wellness }) {
           <div className="pp-rec-label">Do this</div>
           <div>{rec.specifics}</div>
         </div>
+        {rec.targetPace && (
+          <div className="pp-rec-block">
+            <div className="pp-rec-label">Ideal pace</div>
+            <div>{rec.targetPace}</div>
+          </div>
+        )}
         <div className="pp-rec-block">
           <div className="pp-rec-label">Why this, why now</div>
           <div>{rec.why}</div>
