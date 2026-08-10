@@ -399,7 +399,7 @@ function App() {
               {tab === "running" && (
                 <RunHistory runningActivities={runningActivities} />
               )}
-              {tab === "coach" && <Coach runningActivities={runningActivities} strength={strength} wellness={recovery.wellness} />}
+              {tab === "coach" && <Coach runningActivities={runningActivities} strength={strength} />}
             </>
           )}
         </main>
@@ -1176,20 +1176,21 @@ function acuteChronicRatio(runningActivities) {
   return vol7 / chronicWeekly;
 }
 
-function medianOf(arr) {
-  const s = [...arr].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+// Ivan's treadmill pace runs measurably faster than equivalent outdoor effort —
+// not empirically calibrated, just a reasonable estimate. Applied before any
+// treadmill-derived pace feeds into outdoor-goal-pace comparisons.
+const TREADMILL_DISCOUNT_SEC = 15;
+function effortAdjustedPaceSec(a) {
+  const p = activityPaceSec(a);
+  if (p == null) return null;
+  return a && a.type === "treadmill_running" ? p + TREADMILL_DISCOUNT_SEC : p;
 }
 
-// Trailing personal baseline (median, not mean, so one noisy day doesn't skew it) —
-// needs a real sample before it's trusted, otherwise returns null.
-function trailingRestingHrBaseline(wellness, days = 14) {
-  const vals = wellness
-    .filter((w) => w.resting_hr != null && daysSince(w.date) <= days)
-    .map((w) => w.resting_hr);
-  if (vals.length < 5) return null;
-  return medianOf(vals);
+function stdevOf(arr) {
+  if (arr.length < 2) return 0;
+  const m = arr.reduce((s, v) => s + v, 0) / arr.length;
+  const variance = arr.reduce((s, v) => s + (v - m) * (v - m), 0) / arr.length;
+  return Math.sqrt(variance);
 }
 
 // Calendar (Monday-Sunday) run counts for the last n weeks, index 0 = this week
@@ -1213,7 +1214,7 @@ function lastNWeekRunCounts(runningActivities, n) {
   return counts;
 }
 
-function Coach({ runningActivities, strength, wellness }) {
+function Coach({ runningActivities, strength }) {
   const [subTab, setSubTab] = useState("run");
   return (
     <div className="pp-page">
@@ -1223,22 +1224,28 @@ function Coach({ runningActivities, strength, wellness }) {
         <button className={"pp-subnav-btn" + (subTab === "strength" ? " active" : "")} onClick={() => setSubTab("strength")}>Strength Coach</button>
       </div>
       {subTab === "run"
-        ? <RunCoach runningActivities={runningActivities} strength={strength} wellness={wellness} />
+        ? <RunCoach runningActivities={runningActivities} strength={strength} />
         : <StrengthCoachPlaceholder strength={strength} />}
     </div>
   );
 }
 
-function RunCoach({ runningActivities, strength, wellness }) {
+function RunCoach({ runningActivities, strength }) {
   const avg = (arr) => arr.reduce((s, v) => s + v, 0) / arr.length;
 
   const last = runningActivities[0] || null;
-  const last3 = runningActivities.slice(0, 3);
-  const last3Paces = last3.map(activityPaceSec).filter((p) => p != null);
-  const avgRecentPace = last3Paces.length ? avg(last3Paces) : null;
-  const last3Summary = last3.map((a) => `${fmtShort(activityDate(a))} ${secToPace(activityPaceSec(a))}/km`).join(", ");
 
-  const STRETCH_PACE_SEC = GOAL_PACE_SEC - 10; // 4:40/km — next tier once 4:50 is consistently beaten
+  /* ---- pace evidence: last 3 HARD-EFFORT runs only, treadmill-pace-adjusted. An easy jog ---- */
+  /* ---- shouldn't dilute the read on race-pace fitness, and treadmill pace runs measurably ---- */
+  /* ---- easier than the same effort outdoors (see effortAdjustedPaceSec). ---- */
+  const recentHardRuns = runningActivities.filter(isHardRun).slice(0, 3);
+  const recentHardPaces = recentHardRuns.map(effortAdjustedPaceSec).filter((p) => p != null);
+  const avgRecentPace = recentHardPaces.length ? avg(recentHardPaces) : null;
+  const recentHardSummary = recentHardRuns
+    .map((a) => `${fmtShort(activityDate(a))} ${secToPace(effortAdjustedPaceSec(a))}/km${a.type === "treadmill_running" ? " (treadmill, adjusted)" : ""}`)
+    .join(", ");
+  const PACE_CONSISTENCY_THRESHOLD_SEC = 10; // estimate, not empirically calibrated — tune later
+  const isConsistent = recentHardPaces.length < 2 ? true : stdevOf(recentHardPaces) <= PACE_CONSISTENCY_THRESHOLD_SEC;
 
   /* ---- ideal easy-effort pace: anchored to your own recent easy runs where you have ---- */
   /* ---- them, otherwise a standard easy-day offset off goal pace ---- */
@@ -1271,11 +1278,10 @@ function RunCoach({ runningActivities, strength, wellness }) {
   const heavyStrengthRecent = lastStrength && strengthGapDays <= 1;
   const strengthCountWeek = strength.filter((e) => e.date >= mondayStr).length;
 
-  /* ---- last-run hard-effort check (existing recovery trigger) ---- */
-  const lastWasHard = last && isHardRun(last) && daysSince(activityDate(last)) <= 2;
-
-  /* ---- pace trend: last 3 vs the 3 before that ---- */
-  const priorPaces = runningActivities.slice(3, 6).map(activityPaceSec).filter((p) => p != null);
+  /* ---- pace trend: last 3 hard-effort runs vs the 3 before that (same treadmill-adjusted ---- */
+  /* ---- basis as avgRecentPace, so the TREND tag and the pace evidence text never disagree) ---- */
+  const priorHardRuns = runningActivities.filter(isHardRun).slice(3, 6);
+  const priorPaces = priorHardRuns.map(effortAdjustedPaceSec).filter((p) => p != null);
   const priorAvgPace = priorPaces.length ? avg(priorPaces) : null;
   let trend = null;
   if (avgRecentPace != null && priorAvgPace != null) {
@@ -1285,12 +1291,14 @@ function RunCoach({ runningActivities, strength, wellness }) {
     else trend = "plateau";
   }
 
-  /* ---- heart-rate trend: last 3 runs vs the 3 before that (context only, not a gate — ---- */
-  /* ---- raw HR without controlling for pace/conditions is too weak a signal to prescribe off) ---- */
-  const last3Hr = last3.map((a) => a.avg_hr).filter((v) => v != null);
-  const avgRecentHr = last3Hr.length ? avg(last3Hr) : null;
-  const priorHr = runningActivities.slice(3, 6).map((a) => a.avg_hr).filter((v) => v != null);
-  const priorAvgHr = priorHr.length ? avg(priorHr) : null;
+  /* ---- heart-rate trend: last 3 runs of ANY type vs the 3 before that (context only, not a ---- */
+  /* ---- gate — raw HR without controlling for pace/conditions is too weak to prescribe off; ---- */
+  /* ---- kept on an any-type basis since it's a general cardiovascular-load signal, not a ---- */
+  /* ---- race-pace-fitness one) ---- */
+  const recentAny3Hr = runningActivities.slice(0, 3).map((a) => a.avg_hr).filter((v) => v != null);
+  const avgRecentHr = recentAny3Hr.length ? avg(recentAny3Hr) : null;
+  const priorAny3Hr = runningActivities.slice(3, 6).map((a) => a.avg_hr).filter((v) => v != null);
+  const priorAvgHr = priorAny3Hr.length ? avg(priorAny3Hr) : null;
   let hrTrend = null;
   if (avgRecentHr != null && priorAvgHr != null) {
     const hrDiff = avgRecentHr - priorAvgHr;
@@ -1303,15 +1311,6 @@ function RunCoach({ runningActivities, strength, wellness }) {
   const vol28 = volumeInWindow(runningActivities, 28);
   const chronicWeekly = vol28 / 4;
   const acwr = acuteChronicRatio(runningActivities);
-
-  /* ---- recovery signal from Garmin wellness data ---- */
-  const latestReadinessRow = latestNonNullRecovery(wellness, "training_readiness");
-  const latestReadiness = latestReadinessRow ? latestReadinessRow.training_readiness : null;
-  const latestRhrRow = latestNonNullRecovery(wellness, "resting_hr");
-  const latestRhr = latestRhrRow ? latestRhrRow.resting_hr : null;
-  const rhrBaseline = trailingRestingHrBaseline(wellness, 14);
-  const rhrDelta = latestRhr != null && rhrBaseline != null ? latestRhr - rhrBaseline : null;
-  const recoveryRedFlag = (rhrDelta != null && rhrDelta >= 15) || (latestReadiness != null && latestReadiness < 25);
 
   /* ---- consistency: rolling 4-week run counts ---- */
   const weekCounts = lastNWeekRunCounts(runningActivities, 4);
@@ -1336,13 +1335,77 @@ function RunCoach({ runningActivities, strength, wellness }) {
 
   /* ---- workout format rotation, to avoid prescribing the exact same session every time ---- */
   const intervalFormats = [
-    { label: `6 × 1km @ {p}/km`, specifics: (p) => `Run 6 × 1km at ${p}/km pace, with 90 seconds easy jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`, dist: 8 },
-    { label: `4 × 1.5km @ {p}/km`, specifics: (p) => `Run 4 × 1.5km at ${p}/km pace, with 2 minutes easy jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`, dist: 9 },
-    { label: `8 × 400m hill reps`, specifics: (p) => `Run 8 × 400m hard uphill (aim for effort equivalent to ${p}/km on flat), jog back down for recovery. Warm up 1km easy first, cool down 1km easy after.`, dist: 6 },
-    { label: `Progression run`, specifics: (p) => `Run 6km continuous: first 2km easy, middle 2km at ${p}/km, final 2km faster than ${p}/km if it feels controlled.`, dist: 6 },
+    { kind: "interval", label: `6 × 1km @ {p}/km`, specifics: (p) => `Run 6 × 1km at ${p}/km pace, with 90 seconds easy jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`, dist: 8 },
+    { kind: "interval", label: `4 × 1.5km @ {p}/km`, specifics: (p) => `Run 4 × 1.5km at ${p}/km pace, with 2 minutes easy jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`, dist: 9 },
+    { kind: "interval", label: `8 × 400m hill reps`, specifics: (p) => `Run 8 × 400m hard uphill (aim for effort equivalent to ${p}/km on flat), jog back down for recovery. Warm up 1km easy first, cool down 1km easy after.`, dist: 6 },
+    { kind: "interval", label: `Progression run`, specifics: (p) => `Run 6km continuous: first 2km easy, middle 2km at ${p}/km, final 2km faster than ${p}/km if it feels controlled.`, dist: 6 },
+  ];
+  /* ---- bodyweight-only compromised-running formats — no equipment, simulates Hyrox's ---- */
+  /* ---- run-then-station fatigue pattern. Blended into the rotation only in build/peak ---- */
+  /* ---- phase (see `pool` below) — base phase stays pure pace development. ---- */
+  const compromisedFormats = [
+    { kind: "compromised", label: `1km run + 15 burpees ×4`, specifics: (p) => `Run 1km at ${p}/km pace, then 15 burpees. Repeat for 4 rounds total — move straight from the run into the burpees, resting only as long as it takes to get moving again. This is about holding pace on tired legs, not the burpees themselves.`, dist: 4 },
+    { kind: "compromised", label: `800m run + 20 squats + 15 pushups ×4`, specifics: (p) => `Run 800m at ${p}/km pace, then 20 bodyweight squats and 15 pushups. Repeat for 4 rounds total. Keep the transitions quick — the goal is holding pace off fatigued legs, which is exactly what race day demands.`, dist: 3.2 },
   ];
   const totalHardRunsLogged = runningActivities.filter(isHardRun).length;
-  const format = intervalFormats[totalHardRunsLogged % intervalFormats.length];
+  const pool = (phase === "build" || phase === "peak")
+    ? [...intervalFormats, ...compromisedFormats, ...compromisedFormats]
+    : intervalFormats;
+
+  /* ---- lap-based fade detection: fetch the most recent hard-effort run's lap detail and ---- */
+  /* ---- compare its first vs last ACTIVE-lap pace. A real fade means "give it another crack" ---- */
+  /* ---- (repeat the same format); holding or negative-splitting means "progress". Background ---- */
+  /* ---- enrichment only — degrades silently on 404/parse-failure/insufficient laps, no ---- */
+  /* ---- user-facing loading/error state, unlike RunDetailModal's fetch. ---- */
+  const lastHardRun = runningActivities.filter(isHardRun)[0] || null;
+  const lastHardRunId = lastHardRun ? lastHardRun.id : null;
+  const [fadeSignal, setFadeSignal] = useState(null);
+  const [fadeDetail, setFadeDetail] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFadeSignal(null);
+    setFadeDetail(null);
+    if (!lastHardRunId) return;
+    (async () => {
+      try {
+        const res = await fetch(`./activity_details/${lastHardRunId}.json`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const activeLaps = (data.laps || []).filter((l) => l.intensity_type === "ACTIVE" && l.avg_pace_sec_per_km != null);
+        if (activeLaps.length < 2) return;
+        const firstPace = activeLaps[0].avg_pace_sec_per_km;
+        const lastPace = activeLaps[activeLaps.length - 1].avg_pace_sec_per_km;
+        const delta = lastPace - firstPace;
+        const FADE_THRESHOLD_SEC = 8; // estimate, not empirically calibrated — tune later
+        setFadeSignal(delta > FADE_THRESHOLD_SEC ? "faded" : delta < -FADE_THRESHOLD_SEC ? "negative_split" : "held");
+        setFadeDetail({ firstPace, lastPace });
+      } catch (e) {
+        // silent no-op — background enrichment, not user-facing
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [lastHardRunId]);
+
+  // Known limitation: this correctly repeats the same format after a single fade, but doesn't
+  // compound correctly across 2+ consecutive fades (no persisted state exists anywhere in this
+  // app; building that is disproportionate to the value here). A repeated fade lands on an
+  // adjacent-but-different format rather than the exact same one again — still reasonable.
+  const naturalIndex = totalHardRunsLogged % pool.length;
+  const priorIndex = (naturalIndex - 1 + pool.length) % pool.length;
+  const format = pool[fadeSignal === "faded" ? priorIndex : naturalIndex];
+
+  /* ---- activity-level HR cross-check (NOT daily wellness — Ivan only wears his Garmin ---- */
+  /* ---- during exercise, so per-activity avg_hr/max_hr are reliable where daily resting_hr ---- */
+  /* ---- is not). Informational context only, never a tier gate. ---- */
+  const maxHrPool = runningActivities.map((a) => a.max_hr).filter((v) => v != null);
+  const bestObservedMaxHr = maxHrPool.length ? Math.max(...maxHrPool) : null;
+  const HR_EFFORT_RATIO_THRESHOLD = 0.88; // estimate, small sample size caveat — tune later
+  const hrEffortRatio = (lastHardRun && lastHardRun.avg_hr != null && bestObservedMaxHr != null)
+    ? lastHardRun.avg_hr / bestObservedMaxHr
+    : null;
+  const highEffortDespiteSlowPace = hrEffortRatio != null && hrEffortRatio >= HR_EFFORT_RATIO_THRESHOLD;
 
   const trendNote = trend === "improving"
     ? ` Your pace is trending faster than your prior block — the work is compounding.`
@@ -1354,20 +1417,9 @@ function RunCoach({ runningActivities, strength, wellness }) {
 
   let rec;
   let recIsHardEffort = false;
+  let paceTier = null;
 
-  if (recoveryRedFlag) {
-    const reasons = [];
-    if (rhrDelta != null && rhrDelta >= 15) reasons.push(`your resting heart rate this morning was ${Math.round(latestRhr)}bpm, ${Math.round(rhrDelta)}bpm above your ${Math.round(rhrBaseline)}bpm two-week baseline`);
-    if (latestReadiness != null && latestReadiness < 25) reasons.push(`your Garmin training readiness is sitting at ${Math.round(latestReadiness)}/100`);
-    const reasonText = reasons.join(", and ");
-    rec = {
-      objective: "Rest day — listen to your body first",
-      specifics: "No run today. Rest, hydrate, and get a full night's sleep if you can.",
-      distanceLine: "Rest — no run prescribed",
-      targetPace: null,
-      why: `${reasonText.charAt(0).toUpperCase()}${reasonText.slice(1)}. A signal like this is usually your body flagging something — illness, dehydration, poor sleep, or accumulated fatigue — before it shows up as a bad workout. Training through it risks digging the hole deeper. If it persists beyond a day or two, that's worth a doctor's opinion rather than pushing through.`,
-    };
-  } else if (runningActivities.length < 3) {
+  if (runningActivities.length < 3) {
     rec = {
       objective: "Build a baseline",
       specifics: "Run 5km at a controlled, comfortable effort — don't chase pace yet.",
@@ -1378,10 +1430,10 @@ function RunCoach({ runningActivities, strength, wellness }) {
   } else if (isLayoff) {
     rec = {
       objective: "Reintroduction run",
-      specifics: "Run 4km at an easy, conversational effort. Ignore pace completely today.",
-      distanceLine: "4 km easy",
+      specifics: "Run at least 5km at an easy, conversational effort. Ignore pace completely today — distance and time on feet matter more than speed here.",
+      distanceLine: "5+ km easy",
       targetPace: EASY_PACE_LABEL,
-      why: `It's been ${lastRunGapDays} days since your last synced run. Picking up where your old pace data left off would risk injury — this session rebuilds the habit and checks how your legs respond before any quality work resumes.`,
+      why: `It's been ${lastRunGapDays} days since your last synced run. Picking up where your old pace data left off would risk injury — this session rebuilds the habit and checks how your legs respond before any quality work resumes. Treat 5km as a floor, not a cap — go further if it feels good, just keep the effort easy throughout.`,
     };
   } else if (acwr != null && acwr > 1.5) {
     rec = {
@@ -1390,17 +1442,6 @@ function RunCoach({ runningActivities, strength, wellness }) {
       distanceLine: "4 km easy, or rest",
       targetPace: EASY_PACE_LABEL,
       why: `Your acute:chronic workload ratio is ${acwr.toFixed(2)} — ${vol7.toFixed(1)}km in the last 7 days against a ${chronicWeekly.toFixed(1)}km/week average over the last month. Ratios above 1.5 are where the injury-risk research gets consistent — your body hasn't adapted to this volume yet. Backing off for a few days protects the fitness you've already built rather than risking a setback that costs weeks.`,
-    };
-  } else if (lastWasHard || heavyStrengthRecent) {
-    const reasons = [];
-    if (lastWasHard) reasons.push(`your last run (${fmtShort(activityDate(last))}, ${secToPace(activityPaceSec(last))}/km) was high-intensity within the last 2 days`);
-    if (heavyStrengthRecent) reasons.push(`you logged a ${lastStrength.lift} session ${strengthGapDays === 0 ? "today" : "yesterday"}`);
-    rec = {
-      objective: "Recovery run",
-      specifics: "Run 4km easy. Do not watch pace on this one — effort only.",
-      distanceLine: "4 km easy",
-      targetPace: EASY_PACE_LABEL,
-      why: `${reasons.join(" and ")}. This session is mandatory recovery, not optional — running hard again today would blunt tomorrow's quality and stack fatigue on top of lifting load.`,
     };
   } else if (hardRunsWeek.length >= 2) {
     rec = {
@@ -1427,34 +1468,55 @@ function RunCoach({ runningActivities, strength, wellness }) {
       targetPace: EASY_PACE_LABEL,
       why: `You've run ${weekCounts[0] + weekCounts[1]} time(s) in the last two weeks. That's not enough training stimulus for pace work to matter yet — chasing ${secToPace(GOAL_PACE_SEC)}/km off an inconsistent base builds neither fitness nor confidence. The fix isn't one heroic session; it's showing up again this week and next. Once you've strung together a couple of consistent weeks, pace work comes back on the table.`,
     };
-  } else if (avgRecentPace && avgRecentPace > GOAL_PACE_SEC + 15) {
+  } else if (avgRecentPace == null || avgRecentPace > GOAL_PACE_SEC + 15 || !isConsistent) {
     recIsHardEffort = true;
+    paceTier = "A";
     const paceStr = secToPace(GOAL_PACE_SEC);
     const volumeNote = phase === "base" ? " This is trimmed slightly since you're still in a base-building block — volume over intensity for now." : "";
+    const consistencyNote = (avgRecentPace != null && !isConsistent)
+      ? ` Your recent hard-effort paces have swung by more than ${PACE_CONSISTENCY_THRESHOLD_SEC}s/km run to run — that variance matters more than the average right now.`
+      : "";
+    const fadeNote = fadeSignal === "faded" && fadeDetail
+      ? ` Your last hard session faded late (${secToPace(fadeDetail.firstPace)}/km first rep vs ${secToPace(fadeDetail.lastPace)}/km last rep) — same format again today to bank that stimulus before moving on.`
+      : "";
+    const hrNote = highEffortDespiteSlowPace
+      ? ` Worth noting: your heart rate on that last hard run (${Math.round(lastHardRun.avg_hr)}bpm, ${Math.round(hrEffortRatio * 100)}% of your observed max of ${Math.round(bestObservedMaxHr)}bpm) shows it was a genuinely hard effort — the slower pace likely reflects conditions (heat, humidity) more than fitness.`
+      : "";
     rec = {
-      objective: `Interval work at ${paceStr}/km`,
+      objective: format.kind === "compromised" ? `Compromised running work at ${paceStr}/km` : `Interval work at ${paceStr}/km`,
       specifics: format.specifics(paceStr),
-      distanceLine: `${format.dist} km total @ ${paceStr}/km on the reps`,
-      targetPace: `${paceStr}/km on the reps — goal race pace`,
-      why: `Your last 3 runs (${last3Summary}) averaged ${secToPace(avgRecentPace)}/km — ${Math.round(avgRecentPace - GOAL_PACE_SEC)}s slower than the ${paceStr}/km target you need across all 8 Hyrox rounds. Broken reps at target pace close that gap without the fatigue cost of a continuous effort at the same speed.${volumeNote}${trendNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
+      distanceLine: `${format.dist} km total @ ${paceStr}/km${format.kind === "compromised" ? " on the run segments" : " on the reps"}`,
+      targetPace: `${paceStr}/km${format.kind === "compromised" ? " on the run segments" : " on the reps"} — goal race pace`,
+      why: avgRecentPace != null
+        ? `Your last ${recentHardRuns.length} hard-effort run(s) (${recentHardSummary}) averaged ${secToPace(avgRecentPace)}/km — ${Math.round(avgRecentPace - GOAL_PACE_SEC)}s slower than the ${paceStr}/km target you need across all 8 Hyrox rounds. Broken reps at target pace close that gap without the fatigue cost of a continuous effort at the same speed.${consistencyNote}${volumeNote}${trendNote}${fadeNote}${hrNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`
+        : `No recent hard-effort runs in your synced history — nothing to average yet, so we build interval fitness rather than guess at a stretch target off zero evidence.${volumeNote}${fadeNote}${hrNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
     };
-  } else if (avgRecentPace && avgRecentPace > GOAL_PACE_SEC) {
+  } else if (avgRecentPace != null && avgRecentPace > GOAL_PACE_SEC && isConsistent) {
     recIsHardEffort = true;
+    paceTier = "B";
+    const hrNote = highEffortDespiteSlowPace
+      ? ` Your heart rate on that last hard run (${Math.round(lastHardRun.avg_hr)}bpm, ${Math.round(hrEffortRatio * 100)}% of your observed max) confirms it was a genuinely hard, well-executed effort.`
+      : "";
     rec = {
       objective: `Hold ${secToPace(GOAL_PACE_SEC)}/km continuously`,
       specifics: `Run 6km continuously at ${secToPace(GOAL_PACE_SEC)}/km pace — no walk breaks, no easing off after halfway.`,
       distanceLine: `6 km @ ${secToPace(GOAL_PACE_SEC)}/km`,
       targetPace: `${secToPace(GOAL_PACE_SEC)}/km — goal race pace, held continuously`,
-      why: `Your last 3 runs (${last3Summary}) averaged ${secToPace(avgRecentPace)}/km — close to target but not there continuously. You've done the broken-rep work; now prove you can hold ${secToPace(GOAL_PACE_SEC)}/km for a full sustained effort, which is what race day actually demands.${trendNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
+      why: `Your last ${recentHardRuns.length} hard-effort run(s) (${recentHardSummary}) averaged ${secToPace(avgRecentPace)}/km, consistently within ${PACE_CONSISTENCY_THRESHOLD_SEC}s/km — close to target but not there continuously. You've done the broken-rep work; now prove you can hold ${secToPace(GOAL_PACE_SEC)}/km for a full sustained effort, which is what race day actually demands.${trendNote}${hrNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
     };
   } else {
     recIsHardEffort = true;
+    paceTier = "C";
+    const stretchPaceSec = Math.min(GOAL_PACE_SEC - 10, avgRecentPace - 10);
+    const hrNote = highEffortDespiteSlowPace
+      ? ` Your heart rate on that last hard run (${Math.round(lastHardRun.avg_hr)}bpm, ${Math.round(hrEffortRatio * 100)}% of your observed max) confirms it was a genuinely hard, well-executed effort.`
+      : "";
     rec = {
-      objective: `Push past target — ${secToPace(STRETCH_PACE_SEC)}/km`,
-      specifics: `Run 5 × 1km at ${secToPace(STRETCH_PACE_SEC)}/km pace, with 90 seconds jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`,
-      distanceLine: `7 km total @ ${secToPace(STRETCH_PACE_SEC)}/km on the reps`,
-      targetPace: `${secToPace(STRETCH_PACE_SEC)}/km on the reps — faster than goal pace, since you're consistently beating it now`,
-      why: `Your last 3 runs (${last3Summary}) averaged ${secToPace(avgRecentPace)}/km — already at or under your ${secToPace(GOAL_PACE_SEC)}/km target. Sitting at that pace won't make you faster. The new target is ${secToPace(STRETCH_PACE_SEC)}/km.${trendNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
+      objective: `Push past target — ${secToPace(stretchPaceSec)}/km`,
+      specifics: `Run 5 × 1km at ${secToPace(stretchPaceSec)}/km pace, with 90 seconds jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`,
+      distanceLine: `7 km total @ ${secToPace(stretchPaceSec)}/km on the reps`,
+      targetPace: `${secToPace(stretchPaceSec)}/km on the reps — faster than goal pace, since you're consistently beating it now`,
+      why: `Your last ${recentHardRuns.length} hard-effort run(s) (${recentHardSummary}) averaged ${secToPace(avgRecentPace)}/km, consistently within ${PACE_CONSISTENCY_THRESHOLD_SEC}s/km — already at or under your ${secToPace(GOAL_PACE_SEC)}/km target. Sitting at that pace won't make you faster. The new target is ${secToPace(stretchPaceSec)}/km, set relative to your own demonstrated pace.${trendNote}${hrNote} Training phase: ${phaseLabel}${daysToRace != null ? ` (${daysToRace} days to ${nextRace.name})` : ""}.`,
     };
   }
 
@@ -1503,12 +1565,6 @@ function RunCoach({ runningActivities, strength, wellness }) {
           {acwr != null && (
             <li><span className={"pp-tag " + (acwr > 1.5 ? "alert" : acwr > 1.3 ? "warn" : "good")}>ACWR</span>{acwr.toFixed(2)} (7-day load vs 4-week average)</li>
           )}
-          {latestReadiness != null && (
-            <li><span className={"pp-tag " + (latestReadiness < 25 ? "alert" : latestReadiness < 50 ? "warn" : "good")}>READINESS</span>{Math.round(latestReadiness)}/100 training readiness</li>
-          )}
-          {rhrDelta != null && (
-            <li><span className={"pp-tag " + (rhrDelta >= 15 ? "alert" : rhrDelta >= 7 ? "warn" : "good")}>RESTING HR</span>{Math.round(latestRhr)}bpm ({rhrDelta >= 0 ? "+" : ""}{Math.round(rhrDelta)}bpm vs 2-week baseline)</li>
-          )}
           <li><span className={"pp-tag " + (weeksWithRun >= 3 ? "good" : weeksWithRun === 2 ? "warn" : "alert")}>CONSISTENCY</span>{weeksWithRun}/4 of your last calendar weeks (Mon-Sun) had a run</li>
           {hrTrend && (
             <li><span className={"pp-tag " + (hrTrend === "rising" ? "warn" : "good")}>HR TREND</span>Average run heart rate is {hrTrend} over your last 6 runs</li>
@@ -1518,6 +1574,9 @@ function RunCoach({ runningActivities, strength, wellness }) {
           )}
           {isRevlDay && (
             <li><span className="pp-tag priority">REVL DAY</span>Today's a scheduled REVL conditioning day — hard running is shifted to another day</li>
+          )}
+          {paceTier === "A" && highEffortDespiteSlowPace && (
+            <li><span className="pp-tag warn">EFFORT CONTEXT</span>Last hard run's HR ({Math.round(lastHardRun.avg_hr)}bpm) was {Math.round(hrEffortRatio * 100)}% of your observed max despite a slower pace — likely conditions, not fitness</li>
           )}
         </ul>
       </div>
