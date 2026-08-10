@@ -497,9 +497,18 @@ function Dashboard({ strength, runningActivities, onLogLift }) {
   const lastRun = runningActivities[0] || null;
   const lastRunPace = lastRun ? activityPaceSec(lastRun) : null;
 
-  const recentRuns = runningActivities.slice(0, 5);
-  const near5k = recentRuns.filter((a) => Math.abs(activityDistanceKm(a) - 5) <= 1).sort((a, b) => activityPaceSec(a) - activityPaceSec(b))[0];
-  const near10k = recentRuns.filter((a) => Math.abs(activityDistanceKm(a) - 10) <= 1.5).sort((a, b) => activityPaceSec(a) - activityPaceSec(b))[0];
+  // "Best" paces search the full synced history (not just recent runs) and are split
+  // outdoor vs treadmill — treadmill pace runs measurably easier than the same effort
+  // outdoors (see effortAdjustedPaceSec in the Coach module), so blending them together
+  // would overstate outdoor race-day fitness.
+  const outdoorRuns = runningActivities.filter((a) => a.type !== "treadmill_running");
+  const treadmillRuns = runningActivities.filter((a) => a.type === "treadmill_running");
+  const bestNear = (pool, targetKm, toleranceKm) =>
+    pool.filter((a) => Math.abs(activityDistanceKm(a) - targetKm) <= toleranceKm).sort((a, b) => activityPaceSec(a) - activityPaceSec(b))[0];
+  const near5k = bestNear(outdoorRuns, 5, 1);
+  const near5kTreadmill = bestNear(treadmillRuns, 5, 1);
+  const near10k = bestNear(outdoorRuns, 10, 1.5);
+  const near10kTreadmill = bestNear(treadmillRuns, 10, 1.5);
 
   const lastStrengthDate = strength.length ? strength.map((e) => e.date).sort().slice(-1)[0] : null;
   const lastRunDate = lastRun ? activityDate(lastRun) : null;
@@ -554,7 +563,9 @@ function Dashboard({ strength, runningActivities, onLogLift }) {
             <div><span className="pp-kv-label">Latest run</span><span className="pp-kv-val">{lastRun ? `${activityDistanceKm(lastRun).toFixed(2)}km · ${secToPace(lastRunPace)}/km · ${fmtShort(activityDate(lastRun))}` : "none synced yet"}</span></div>
             <div><span className="pp-kv-label">Monthly distance</span><span className="pp-kv-val">{distMonth.toFixed(1)} km</span></div>
             <div><span className="pp-kv-label">Best 5k pace</span><span className="pp-kv-val">{near5k ? `${secToPace(activityPaceSec(near5k))}/km` : "no data"}</span></div>
+            <div><span className="pp-kv-label">Best 5k treadmill pace</span><span className="pp-kv-val">{near5kTreadmill ? `${secToPace(activityPaceSec(near5kTreadmill))}/km` : "no data"}</span></div>
             <div><span className="pp-kv-label">Best 10k pace</span><span className="pp-kv-val">{near10k ? `${secToPace(activityPaceSec(near10k))}/km` : "no data"}</span></div>
+            <div><span className="pp-kv-label">Best 10k treadmill pace</span><span className="pp-kv-val">{near10kTreadmill ? `${secToPace(activityPaceSec(near10kTreadmill))}/km` : "no data"}</span></div>
           </div>
         </div>
 
@@ -960,7 +971,7 @@ function RunHistory({ runningActivities }) {
               <div className="pp-list-item clickable" key={a.id || i} onClick={() => setSelectedActivity(a)}>
                 <div className="pp-list-main">
                   <div className="pp-list-top">
-                    <span className="pp-list-badge run">{a.type}</span>
+                    <span className={"pp-list-badge " + (a.type === "treadmill_running" ? "treadmill" : "run")}>{a.type}</span>
                     <span className="pp-list-date">{activityDate(a) ? fmtDate(activityDate(a)) : "unknown date"}</span>
                     {a.name && <span className="pp-list-class">{a.name}</span>}
                   </div>
@@ -1021,12 +1032,20 @@ function RunDetailModal({ activity, onClose }) {
         </div>
         <div className="pp-modal-body">
           <div className="pp-detail-section">
-            <div className="pp-grid pp-grid-stats" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
-              <div className="pp-stat"><div className="pp-stat-val">{activityDistanceKm(activity).toFixed(2)}</div><div className="pp-stat-label">km</div></div>
+            <div className="pp-grid pp-grid-stats" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+              <div className="pp-stat pp-stat-stacked">
+                <div>
+                  <div className="pp-stat-val">{activityDistanceKm(activity).toFixed(2)}</div>
+                  <div className="pp-stat-label">km</div>
+                </div>
+                <div className="pp-stat-mini">
+                  <div className="pp-stat-val">{activity.calories ? Math.round(activity.calories) : "–"}</div>
+                  <div className="pp-stat-label">calories</div>
+                </div>
+              </div>
               <div className="pp-stat"><div className="pp-stat-val">{secToPace(activityPaceSec(activity))}</div><div className="pp-stat-label">avg pace /km</div></div>
               <div className="pp-stat"><div className="pp-stat-val">{fmtDuration(activity.duration_seconds)}</div><div className="pp-stat-label">total time</div></div>
               <div className="pp-stat"><div className="pp-stat-val">{activity.avg_hr ? Math.round(activity.avg_hr) : "–"}</div><div className="pp-stat-label">avg HR</div></div>
-              <div className="pp-stat"><div className="pp-stat-val">{activity.calories ? Math.round(activity.calories) : "–"}</div><div className="pp-stat-label">calories</div></div>
             </div>
           </div>
 
@@ -1093,7 +1112,7 @@ function HrPaceCharts({ timeseries }) {
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="t" stroke="var(--dim)" fontSize={11} tickFormatter={timeTick} />
-            <YAxis stroke="var(--dim)" fontSize={11} unit=" bpm" width={55} />
+            <YAxis stroke="var(--dim)" fontSize={11} unit=" bpm" width={55} domain={[70, "auto"]} />
             <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={timeTick} formatter={(v) => [v, "HR"]} />
             <Line type="monotone" dataKey="hr" stroke="#FF4433" dot={false} strokeWidth={1.5} connectNulls />
           </LineChart>
@@ -1337,7 +1356,6 @@ function RunCoach({ runningActivities, strength }) {
   const intervalFormats = [
     { kind: "interval", label: `6 × 1km @ {p}/km`, specifics: (p) => `Run 6 × 1km at ${p}/km pace, with 90 seconds easy jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`, dist: 8 },
     { kind: "interval", label: `4 × 1.5km @ {p}/km`, specifics: (p) => `Run 4 × 1.5km at ${p}/km pace, with 2 minutes easy jog recovery between reps. Warm up 1km easy first, cool down 1km easy after.`, dist: 9 },
-    { kind: "interval", label: `8 × 400m hill reps`, specifics: (p) => `Run 8 × 400m hard uphill (aim for effort equivalent to ${p}/km on flat), jog back down for recovery. Warm up 1km easy first, cool down 1km easy after.`, dist: 6 },
     { kind: "interval", label: `Progression run`, specifics: (p) => `Run 6km continuous: first 2km easy, middle 2km at ${p}/km, final 2km faster than ${p}/km if it feels controlled.`, dist: 6 },
   ];
   /* ---- bodyweight-only compromised-running formats — no equipment, simulates Hyrox's ---- */
@@ -1727,6 +1745,9 @@ const CSS = `
 .pp-stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; }
 .pp-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; }
 .pp-stat-label { font-size: 10.5px; color: var(--dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.03em; }
+.pp-stat-stacked { display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+.pp-stat-stacked .pp-stat-mini { padding-top: 10px; border-top: 1px solid var(--border); }
+.pp-stat-stacked .pp-stat-mini .pp-stat-val { font-size: 15px; }
 
 .pp-lift-block { padding: 9px 0; border-bottom: 1px solid var(--border); }
 .pp-lift-block:last-of-type { border-bottom: none; }
@@ -1761,6 +1782,7 @@ const CSS = `
 .pp-list-top { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
 .pp-list-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; color: #14151A; text-transform: uppercase; letter-spacing: 0.02em; }
 .pp-list-badge.run { background: var(--teal); }
+.pp-list-badge.treadmill { background: var(--gold); }
 .pp-list-date { font-size: 11.5px; color: var(--dim); font-family: 'JetBrains Mono', monospace; }
 .pp-list-class { font-size: 11.5px; color: var(--dim); }
 .pp-list-sets { font-size: 13px; font-family: 'JetBrains Mono', monospace; }
