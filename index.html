@@ -113,6 +113,25 @@ const maxWeight = (entry) => entry.sets.reduce((best, s) => Math.max(best, Numbe
 const volume = (entry) => entry.sets.reduce((v, s) => v + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0);
 const daysSince = (d) => Math.floor((new Date(new Date().toDateString()) - new Date(d + "T00:00:00")) / 86400000);
 
+// Local (not UTC) yyyy-MM-dd -- toISOString() is UTC and can land on the wrong
+// calendar day depending on timezone offset (e.g. any time before 8am in
+// Singapore, UTC is still "yesterday").
+const toLocalDateStr = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+// Monday-start calendar week (weekly stats app-wide run Mon-Sun, not a rolling
+// 7-day window), as a yyyy-MM-dd string for the Monday of the week containing `d`.
+const mondayOfWeekStr = (d) => {
+  const date = new Date(d);
+  const day = date.getDay(); // 0=Sun..6=Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return toLocalDateStr(date);
+};
+
 /* ------------------------------------ storage (Google Sheets backend) ------------------------------------ */
 
 // Normalizes a date value to a plain "yyyy-MM-dd" string. Handles both the
@@ -447,12 +466,17 @@ function PaceRing({ paceSec, label }) {
 
 function Dashboard({ strength, runningActivities, onLogLift }) {
   const now = new Date();
-  const weekAgo = new Date(now); weekAgo.setDate(now.getDate() - 7);
+  const mondayStr = mondayOfWeekStr(now); // calendar week, Monday-Sunday -- not a rolling 7 days
   const monthAgo = new Date(now); monthAgo.setDate(now.getDate() - 30);
   const inRange = (d, from) => d && new Date(d + "T00:00:00") >= from;
+  const inCalendarWeek = (d) => d && d >= mondayStr;
+  // How many days have actually elapsed since Monday (1 on Monday, up to 7 on
+  // Sunday) -- "rest days" needs this instead of a fixed 7, since mid-week the
+  // rest of the week hasn't happened yet.
+  const daysElapsedThisWeek = Math.floor((new Date(now.toDateString()) - new Date(mondayStr + "T00:00:00")) / 86400000) + 1;
 
-  const strengthWeek = strength.filter((e) => inRange(e.date, weekAgo));
-  const runsWeek = runningActivities.filter((a) => inRange(activityDate(a), weekAgo));
+  const strengthWeek = strength.filter((e) => inCalendarWeek(e.date));
+  const runsWeek = runningActivities.filter((a) => inCalendarWeek(activityDate(a)));
   const strengthMonth = strength.filter((e) => inRange(e.date, monthAgo));
   const runsMonth = runningActivities.filter((a) => inRange(activityDate(a), monthAgo));
   const distWeek = runsWeek.reduce((s, a) => s + activityDistanceKm(a), 0);
@@ -504,7 +528,7 @@ function Dashboard({ strength, runningActivities, onLogLift }) {
         <StatBlock value={runsWeek.length} label="runs completed" accent="teal" />
         <StatBlock value={`${distWeek.toFixed(1)} km`} label="running distance" accent="teal" />
         <StatBlock value={trainingDays} label="training days" accent="red" />
-        <StatBlock value={7 - trainingDays > 0 ? 7 - trainingDays : 0} label="rest days" accent="dim" />
+        <StatBlock value={daysElapsedThisWeek - trainingDays > 0 ? daysElapsedThisWeek - trainingDays : 0} label="rest days" accent="dim" />
       </div>
 
       <div className="pp-section-label">This month</div>
@@ -1031,16 +1055,23 @@ function RunDetailModal({ activity, onClose }) {
   );
 }
 
+const LAP_TYPE_TONE = { ACTIVE: "good", REST: "warn", WARMUP: "priority", COOLDOWN: "priority" };
+
 function LapTable({ laps }) {
   return (
     <table className="pp-lap-table">
       <thead>
-        <tr><th>Lap</th><th>Distance</th><th>Pace</th><th>Avg HR</th></tr>
+        <tr><th>Lap</th><th>Type</th><th>Distance</th><th>Pace</th><th>Avg HR</th></tr>
       </thead>
       <tbody>
         {laps.map((l, i) => (
           <tr key={i}>
             <td>{l.lap_index ?? i + 1}</td>
+            <td>
+              {l.intensity_type ? (
+                <span className={"pp-tag " + (LAP_TYPE_TONE[l.intensity_type] || "warn")}>{l.intensity_type}</span>
+              ) : "–"}
+            </td>
             <td>{l.distance_m != null ? (l.distance_m / 1000).toFixed(2) + "km" : "–"}</td>
             <td>{l.avg_pace_sec_per_km != null ? secToPace(l.avg_pace_sec_per_km) + "/km" : "–"}</td>
             <td>{l.avg_hr != null ? `${l.avg_hr} bpm` : "–"}</td>
@@ -1161,14 +1192,21 @@ function trailingRestingHrBaseline(wellness, days = 14) {
   return medianOf(vals);
 }
 
-// Rolling (not calendar) 4-week run counts, index 0 = most recent 7-day window.
+// Calendar (Monday-Sunday) run counts for the last n weeks, index 0 = this week
+// (Monday through today, so it's partial until Sunday), index 1 = last full
+// week, etc.
 function lastNWeekRunCounts(runningActivities, n) {
+  const mondayThisWeek = new Date(mondayOfWeekStr(new Date()) + "T00:00:00");
   const counts = [];
   for (let w = 0; w < n; w++) {
+    const weekStart = new Date(mondayThisWeek); weekStart.setDate(mondayThisWeek.getDate() - w * 7);
+    const weekEnd = new Date(mondayThisWeek); weekEnd.setDate(mondayThisWeek.getDate() - w * 7 + 6);
+    const startStr = toLocalDateStr(weekStart);
+    const endStr = toLocalDateStr(weekEnd);
     counts.push(
       runningActivities.filter((a) => {
-        const gap = daysSince(activityDate(a));
-        return gap >= w * 7 && gap < (w + 1) * 7;
+        const d = activityDate(a);
+        return d && d >= startStr && d <= endStr;
       }).length
     );
   }
@@ -1216,9 +1254,11 @@ function RunCoach({ runningActivities, strength, wellness }) {
     : GOAL_PACE_SEC + EASY_BUFFER_SEC;
   const EASY_PACE_LABEL = `${secToPace(easyPaceSec)}/km or slower — easy, conversational effort`;
 
-  /* ---- weekly structure: how many hard sessions already this week? ---- */
-  const runsWeek = runningActivities.filter((a) => daysSince(activityDate(a)) <= 7);
+  /* ---- weekly structure: how many hard sessions already this (calendar, Mon-Sun) week? ---- */
+  const mondayStr = mondayOfWeekStr(new Date());
+  const runsWeek = runningActivities.filter((a) => activityDate(a) && activityDate(a) >= mondayStr);
   const hardRunsWeek = runsWeek.filter(isHardRun);
+  const volWeekToDate = runsWeek.reduce((s, a) => s + activityDistanceKm(a), 0);
 
   /* ---- layoff detection ---- */
   const lastRunGapDays = last ? daysSince(activityDate(last)) : null;
@@ -1229,7 +1269,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
   const lastStrength = sortedStrength[0] || null;
   const strengthGapDays = lastStrength ? daysSince(lastStrength.date) : null;
   const heavyStrengthRecent = lastStrength && strengthGapDays <= 1;
-  const strengthCount7 = strength.filter((e) => daysSince(e.date) <= 7).length;
+  const strengthCountWeek = strength.filter((e) => e.date >= mondayStr).length;
 
   /* ---- last-run hard-effort check (existing recovery trigger) ---- */
   const lastWasHard = last && isHardRun(last) && daysSince(activityDate(last)) <= 2;
@@ -1434,7 +1474,7 @@ function RunCoach({ runningActivities, strength, wellness }) {
       <div className="pp-card">
         <div className="pp-card-title"><TrendingUp size={15} /> Fitness Summary</div>
         <div className="pp-grid pp-grid-stats" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginBottom: 14 }}>
-          <StatBlock value={`${vol7.toFixed(1)} km`} label="this week" accent="teal" />
+          <StatBlock value={`${volWeekToDate.toFixed(1)} km`} label="this week" accent="teal" />
           <StatBlock value={`${chronicWeekly.toFixed(1)} km`} label="4-week avg" accent="teal" />
         </div>
         <div className="pp-run-summary">
@@ -1469,12 +1509,12 @@ function RunCoach({ runningActivities, strength, wellness }) {
           {rhrDelta != null && (
             <li><span className={"pp-tag " + (rhrDelta >= 15 ? "alert" : rhrDelta >= 7 ? "warn" : "good")}>RESTING HR</span>{Math.round(latestRhr)}bpm ({rhrDelta >= 0 ? "+" : ""}{Math.round(rhrDelta)}bpm vs 2-week baseline)</li>
           )}
-          <li><span className={"pp-tag " + (weeksWithRun >= 3 ? "good" : weeksWithRun === 2 ? "warn" : "alert")}>CONSISTENCY</span>{weeksWithRun}/4 of your last rolling weeks had a run</li>
+          <li><span className={"pp-tag " + (weeksWithRun >= 3 ? "good" : weeksWithRun === 2 ? "warn" : "alert")}>CONSISTENCY</span>{weeksWithRun}/4 of your last calendar weeks (Mon-Sun) had a run</li>
           {hrTrend && (
             <li><span className={"pp-tag " + (hrTrend === "rising" ? "warn" : "good")}>HR TREND</span>Average run heart rate is {hrTrend} over your last 6 runs</li>
           )}
-          {strengthCount7 > 0 && (
-            <li><span className="pp-tag good">REVL STRENGTH</span>{strengthCount7} strength session{strengthCount7 === 1 ? "" : "s"} logged this week</li>
+          {strengthCountWeek > 0 && (
+            <li><span className="pp-tag good">REVL STRENGTH</span>{strengthCountWeek} strength session{strengthCountWeek === 1 ? "" : "s"} logged this week</li>
           )}
           {isRevlDay && (
             <li><span className="pp-tag priority">REVL DAY</span>Today's a scheduled REVL conditioning day — hard running is shifted to another day</li>
