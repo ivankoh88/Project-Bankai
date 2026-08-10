@@ -7,7 +7,8 @@
       "duration_seconds": 493.755,
       "avg_pace_sec_per_km": null,
       "avg_hr": 109,
-      "max_hr": 137
+      "max_hr": 137,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 2,
@@ -15,7 +16,8 @@
       "duration_seconds": 17.921,
       "avg_pace_sec_per_km": null,
       "avg_hr": 106,
-      "max_hr": 109
+      "max_hr": 109,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 3,
@@ -23,7 +25,8 @@
       "duration_seconds": 15.146,
       "avg_pace_sec_per_km": null,
       "avg_hr": 99,
-      "max_hr": 112
+      "max_hr": 112,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 4,
@@ -31,7 +34,8 @@
       "duration_seconds": 109.28,
       "avg_pace_sec_per_km": null,
       "avg_hr": 126,
-      "max_hr": 137
+      "max_hr": 137,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 5,
@@ -39,7 +43,8 @@
       "duration_seconds": 8.003,
       "avg_pace_sec_per_km": null,
       "avg_hr": 122,
-      "max_hr": 126
+      "max_hr": 126,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 6,
@@ -47,7 +52,8 @@
       "duration_seconds": 13.512,
       "avg_pace_sec_per_km": null,
       "avg_hr": 120,
-      "max_hr": 122
+      "max_hr": 122,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 7,
@@ -55,7 +61,8 @@
       "duration_seconds": 6.12,
       "avg_pace_sec_per_km": null,
       "avg_hr": 114,
-      "max_hr": 116
+      "max_hr": 116,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 8,
@@ -63,7 +70,8 @@
       "duration_seconds": 88.153,
       "avg_pace_sec_per_km": null,
       "avg_hr": 129,
-      "max_hr": 144
+      "max_hr": 144,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 9,
@@ -71,7 +79,8 @@
       "duration_seconds": 16.362,
       "avg_pace_sec_per_km": null,
       "avg_hr": 139,
-      "max_hr": 142
+      "max_hr": 142,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 10,
@@ -79,7 +88,8 @@
       "duration_seconds": 6.268,
       "avg_pace_sec_per_km": null,
       "avg_hr": 135,
-      "max_hr": 136
+      "max_hr": 136,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 11,
@@ -87,7 +97,8 @@
       "duration_seconds": 7.38,
       "avg_pace_sec_per_km": null,
       "avg_hr": 136,
-      "max_hr": 136
+      "max_hr": 136,
+      "intensity_type": "ACTIVE"
     },
     {
       "lap_index": 12,
@@ -95,7 +106,8 @@
       "duration_seconds": 745.545,
       "avg_pace_sec_per_km": null,
       "avg_hr": 121,
-      "max_hr": 155
+      "max_hr": 155,
+      "intensity_type": "ACTIVE"
     }
   ],
   "hr_zones": [

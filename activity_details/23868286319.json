@@ -7,7 +7,8 @@
       "duration_seconds": 1991.283,
       "avg_pace_sec_per_km": null,
       "avg_hr": 154,
-      "max_hr": 187
+      "max_hr": 187,
+      "intensity_type": null
     }
   ],
   "hr_zones": [
