@@ -22,7 +22,7 @@
 const { useState, useEffect, useMemo } = React;
 const {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, BarChart, Bar, ReferenceLine, ScatterChart, Scatter,
+  Tooltip, Legend, BarChart, Bar, ReferenceLine, ScatterChart, Scatter, Cell,
 } = Recharts;
 
 /* ------------------------- lightweight icon set (replaces lucide-react) ------------------------- */
@@ -919,12 +919,13 @@ const TOOLTIP_STYLE = { background: "#1F232A", border: "1px solid #2B2E36", bord
 
 function RunHistory({ runningActivities }) {
   const [showAll, setShowAll] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState(null);
   const shown = showAll ? runningActivities : runningActivities.slice(0, 5);
   const remaining = runningActivities.length - shown.length;
 
   return (
     <div className="pp-page">
-      <PageHeader title="Run History" sub="Synced automatically from Garmin — outdoor and treadmill runs, last 60 days." />
+      <PageHeader title="Run History" sub="Synced automatically from Garmin — outdoor and treadmill runs, last 60 days. Click a run for laps, heart rate, and pace." />
       {runningActivities.length === 0 ? (
         <EmptyState icon={Activity} text="No running activities from Garmin in the last 60 days. Runs sync automatically each morning — lace up and this fills in on its own." />
       ) : (
@@ -932,7 +933,7 @@ function RunHistory({ runningActivities }) {
           <div className="pp-card-title"><Activity size={15} /> Runs</div>
           <div className="pp-list">
             {shown.map((a, i) => (
-              <div className="pp-list-item" key={a.id || i}>
+              <div className="pp-list-item clickable" key={a.id || i} onClick={() => setSelectedActivity(a)}>
                 <div className="pp-list-main">
                   <div className="pp-list-top">
                     <span className="pp-list-badge run">{a.type}</span>
@@ -945,6 +946,7 @@ function RunHistory({ runningActivities }) {
                     {a.calories ? ` · ${Math.round(a.calories)} cal` : ""}
                   </div>
                 </div>
+                <ChevronRight size={16} style={{ color: "var(--dim)", flexShrink: 0, marginTop: 3 }} />
               </div>
             ))}
           </div>
@@ -955,6 +957,152 @@ function RunHistory({ runningActivities }) {
           )}
         </div>
       )}
+      {selectedActivity && <RunDetailModal activity={selectedActivity} onClose={() => setSelectedActivity(null)} />}
+    </div>
+  );
+}
+
+/* ---- run detail: overview + laps + HR/pace/zone charts, all Garmin-sourced ---- */
+
+function RunDetailModal({ activity, onClose }) {
+  const [detail, setDetail] = useState(null);
+  const [detailError, setDetailError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDetail(null);
+    setDetailError(false);
+    (async () => {
+      try {
+        const res = await fetch(`./activity_details/${activity.id}.json`, { cache: "no-store" });
+        if (!res.ok) {
+          if (!cancelled) setDetailError(true);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) setDetail(data);
+      } catch (e) {
+        if (!cancelled) setDetailError(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activity.id]);
+
+  return (
+    <div className="pp-modal-overlay" onClick={onClose}>
+      <div className="pp-modal pp-modal-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="pp-modal-header">
+          <h2><Activity size={16} /> {activity.name || "Run"}</h2>
+          <button className="pp-icon-btn" onClick={onClose}><X size={18} /></button>
+        </div>
+        <div className="pp-modal-body">
+          <div className="pp-detail-section">
+            <div className="pp-grid pp-grid-stats" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+              <div className="pp-stat"><div className="pp-stat-val">{activityDistanceKm(activity).toFixed(2)}</div><div className="pp-stat-label">km</div></div>
+              <div className="pp-stat"><div className="pp-stat-val">{secToPace(activityPaceSec(activity))}</div><div className="pp-stat-label">avg pace /km</div></div>
+              <div className="pp-stat"><div className="pp-stat-val">{fmtDuration(activity.duration_seconds)}</div><div className="pp-stat-label">total time</div></div>
+              <div className="pp-stat"><div className="pp-stat-val">{activity.avg_hr ? Math.round(activity.avg_hr) : "–"}</div><div className="pp-stat-label">avg HR</div></div>
+              <div className="pp-stat"><div className="pp-stat-val">{activity.calories ? Math.round(activity.calories) : "–"}</div><div className="pp-stat-label">calories</div></div>
+            </div>
+          </div>
+
+          <div className="pp-detail-section">
+            <div className="pp-section-label">Laps</div>
+            {detailError ? (
+              <div className="pp-detail-note">Detail not available for this run yet.</div>
+            ) : detail === null ? (
+              <div className="pp-detail-note">Loading laps…</div>
+            ) : detail.laps.length === 0 ? (
+              <div className="pp-detail-note">No lap data recorded for this run.</div>
+            ) : (
+              <LapTable laps={detail.laps} />
+            )}
+          </div>
+
+          {!detailError && detail && detail.timeseries && detail.timeseries.length > 0 && (
+            <HrPaceCharts timeseries={detail.timeseries} />
+          )}
+          {!detailError && detail && detail.hr_zones && detail.hr_zones.length > 0 && (
+            <HrZoneBarChart zones={detail.hr_zones} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LapTable({ laps }) {
+  return (
+    <table className="pp-lap-table">
+      <thead>
+        <tr><th>Lap</th><th>Distance</th><th>Pace</th><th>Avg HR</th></tr>
+      </thead>
+      <tbody>
+        {laps.map((l, i) => (
+          <tr key={i}>
+            <td>{l.lap_index ?? i + 1}</td>
+            <td>{l.distance_m != null ? (l.distance_m / 1000).toFixed(2) + "km" : "–"}</td>
+            <td>{l.avg_pace_sec_per_km != null ? secToPace(l.avg_pace_sec_per_km) + "/km" : "–"}</td>
+            <td>{l.avg_hr != null ? `${l.avg_hr} bpm` : "–"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function HrPaceCharts({ timeseries }) {
+  const data = timeseries.map((p) => ({ t: p.t, hr: p.hr, pace: p.pace_sec_per_km }));
+  const timeTick = (t) => fmtDuration(t);
+  return (
+    <>
+      <div className="pp-detail-section">
+        <div className="pp-section-label">Heart rate</div>
+        <ResponsiveContainer width="100%" height={170}>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="t" stroke="var(--dim)" fontSize={11} tickFormatter={timeTick} />
+            <YAxis stroke="var(--dim)" fontSize={11} unit=" bpm" width={55} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={timeTick} formatter={(v) => [v, "HR"]} />
+            <Line type="monotone" dataKey="hr" stroke="#FF4433" dot={false} strokeWidth={1.5} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="pp-detail-section">
+        <div className="pp-section-label">Pace</div>
+        <ResponsiveContainer width="100%" height={170}>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="t" stroke="var(--dim)" fontSize={11} tickFormatter={timeTick} />
+            <YAxis stroke="var(--dim)" fontSize={11} tickFormatter={secToPace} width={55} reversed />
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={timeTick} formatter={(v) => [secToPace(v) + "/km", "Pace"]} />
+            <Line type="monotone" dataKey="pace" stroke="var(--teal)" dot={false} strokeWidth={1.5} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </>
+  );
+}
+
+const HR_ZONE_COLORS = ["#8D909C", "#2FD9C4", "#E8B33D", "#FF7A33", "#FF4433"];
+
+function HrZoneBarChart({ zones }) {
+  const data = zones.map((z) => ({ zone: `Z${z.zone}`, minutes: z.seconds ? z.seconds / 60 : 0 }));
+  return (
+    <div className="pp-detail-section">
+      <div className="pp-section-label">Time in heart-rate zones</div>
+      <ResponsiveContainer width="100%" height={170}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <XAxis dataKey="zone" stroke="var(--dim)" fontSize={11} />
+          <YAxis stroke="var(--dim)" fontSize={11} unit="m" width={40} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(v) => [`${v.toFixed(1)} min`, "Time"]} />
+          <Bar dataKey="minutes" radius={[3, 3, 0, 0]}>
+            {data.map((d, i) => <Cell key={i} fill={HR_ZONE_COLORS[i] || "var(--teal)"} />)}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -1507,6 +1655,8 @@ const CSS = `
 
 .pp-list { display: flex; flex-direction: column; gap: 8px; }
 .pp-list-item { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 13px 16px; display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.pp-list-item.clickable { cursor: pointer; transition: border-color 0.15s; }
+.pp-list-item.clickable:hover { border-color: var(--dim); }
 .pp-list-actions { display: flex; gap: 2px; flex-shrink: 0; }
 .pp-list-main { min-width: 0; }
 .pp-list-top { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
@@ -1521,8 +1671,17 @@ const CSS = `
 .pp-empty { text-align: center; padding: 50px 20px; color: var(--dim); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .pp-empty p { max-width: 320px; font-size: 13px; margin: 0; }
 
+.pp-lap-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pp-lap-table th { text-align: left; color: var(--dim); font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.pp-lap-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; }
+.pp-lap-table tr:last-child td { border-bottom: none; }
+.pp-detail-note { font-size: 12.5px; color: var(--dim); padding: 10px 0; }
+.pp-detail-section { margin-top: 18px; }
+.pp-detail-section:first-child { margin-top: 0; }
+
 .pp-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
 .pp-modal { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; width: 100%; max-width: 480px; max-height: 88vh; display: flex; flex-direction: column; }
+.pp-modal.pp-modal-wide { max-width: 740px; }
 .pp-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--border); }
 .pp-modal-header h2 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .pp-modal-body { padding: 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
