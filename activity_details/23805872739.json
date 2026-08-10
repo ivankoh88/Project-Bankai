@@ -5,7 +5,7 @@
       "lap_index": 1,
       "distance_m": 1000.0,
       "duration_seconds": 428.178,
-      "avg_pace_sec_per_km": 428.2655176286797,
+      "avg_pace_sec_per_km": 428.178,
       "avg_hr": 124,
       "max_hr": 138,
       "intensity_type": "INTERVAL"
@@ -14,7 +14,7 @@
       "lap_index": 2,
       "distance_m": 1000.0,
       "duration_seconds": 439.459,
-      "avg_pace_sec_per_km": 439.36730665363814,
+      "avg_pace_sec_per_km": 439.459,
       "avg_hr": 132,
       "max_hr": 143,
       "intensity_type": "INTERVAL"
@@ -23,7 +23,7 @@
       "lap_index": 3,
       "distance_m": 1000.0,
       "duration_seconds": 454.664,
-      "avg_pace_sec_per_km": 454.75218452796696,
+      "avg_pace_sec_per_km": 454.664,
       "avg_hr": 139,
       "max_hr": 146,
       "intensity_type": "INTERVAL"
@@ -32,7 +32,7 @@
       "lap_index": 4,
       "distance_m": 1000.0,
       "duration_seconds": 493.338,
-      "avg_pace_sec_per_km": 493.3399232685012,
+      "avg_pace_sec_per_km": 493.338,
       "avg_hr": 138,
       "max_hr": 145,
       "intensity_type": "INTERVAL"
@@ -41,7 +41,7 @@
       "lap_index": 5,
       "distance_m": 1000.0,
       "duration_seconds": 510.041,
-      "avg_pace_sec_per_km": 509.943915098182,
+      "avg_pace_sec_per_km": 510.041,
       "avg_hr": 138,
       "max_hr": 149,
       "intensity_type": "INTERVAL"
@@ -50,7 +50,7 @@
       "lap_index": 6,
       "distance_m": 1000.0,
       "duration_seconds": 553.413,
-      "avg_pace_sec_per_km": 553.4034185423548,
+      "avg_pace_sec_per_km": 553.413,
       "avg_hr": 137,
       "max_hr": 146,
       "intensity_type": "INTERVAL"
@@ -59,7 +59,7 @@
       "lap_index": 7,
       "distance_m": 1000.0,
       "duration_seconds": 307.862,
-      "avg_pace_sec_per_km": 307.8817822582072,
+      "avg_pace_sec_per_km": 307.862,
       "avg_hr": 170,
       "max_hr": 179,
       "intensity_type": "INTERVAL"
@@ -68,7 +68,7 @@
       "lap_index": 8,
       "distance_m": 1000.0,
       "duration_seconds": 309.566,
-      "avg_pace_sec_per_km": 309.5975213916086,
+      "avg_pace_sec_per_km": 309.566,
       "avg_hr": 182,
       "max_hr": 185,
       "intensity_type": "INTERVAL"
@@ -77,7 +77,7 @@
       "lap_index": 9,
       "distance_m": 6.39,
       "duration_seconds": 1.438,
-      "avg_pace_sec_per_km": 225.02251403284404,
+      "avg_pace_sec_per_km": 225.03912363067292,
       "avg_hr": 184,
       "max_hr": 184,
       "intensity_type": "INTERVAL"

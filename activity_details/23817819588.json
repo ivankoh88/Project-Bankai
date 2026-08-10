@@ -5,7 +5,7 @@
       "lap_index": 1,
       "distance_m": 1000.0,
       "duration_seconds": 300.844,
-      "avg_pace_sec_per_km": 300.8423693069493,
+      "avg_pace_sec_per_km": 300.844,
       "avg_hr": 164,
       "max_hr": 175,
       "intensity_type": "INTERVAL"
@@ -14,7 +14,7 @@
       "lap_index": 2,
       "distance_m": 1000.0,
       "duration_seconds": 309.568,
-      "avg_pace_sec_per_km": 309.5975213916086,
+      "avg_pace_sec_per_km": 309.568,
       "avg_hr": 176,
       "max_hr": 178,
       "intensity_type": "INTERVAL"
@@ -23,7 +23,7 @@
       "lap_index": 3,
       "distance_m": 1000.0,
       "duration_seconds": 325.04,
-      "avg_pace_sec_per_km": 324.9918854772552,
+      "avg_pace_sec_per_km": 325.04,
       "avg_hr": 177,
       "max_hr": 180,
       "intensity_type": "INTERVAL"
@@ -32,7 +32,7 @@
       "lap_index": 4,
       "distance_m": 1000.0,
       "duration_seconds": 549.796,
-      "avg_pace_sec_per_km": 549.7526095955417,
+      "avg_pace_sec_per_km": 549.796,
       "avg_hr": 154,
       "max_hr": 174,
       "intensity_type": "INTERVAL"
@@ -41,7 +41,7 @@
       "lap_index": 5,
       "distance_m": 1000.0,
       "duration_seconds": 288.803,
-      "avg_pace_sec_per_km": 288.76696012874464,
+      "avg_pace_sec_per_km": 288.803,
       "avg_hr": 179,
       "max_hr": 187,
       "intensity_type": "INTERVAL"
@@ -50,7 +50,7 @@
       "lap_index": 6,
       "distance_m": 8.64,
       "duration_seconds": 2.107,
-      "avg_pace_sec_per_km": 243.84297511051787,
+      "avg_pace_sec_per_km": 243.86574074074076,
       "avg_hr": 187,
       "max_hr": 187,
       "intensity_type": "INTERVAL"
