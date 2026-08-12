@@ -1162,12 +1162,23 @@ function HrZoneBarChart({ zones }) {
    ====================================================================== */
 
 const HARD_ANAEROBIC_TE = 2.5;
+// A sustained tempo/steady effort can be genuinely hard (high aerobic strain, high HR)
+// while scoring near-zero on anaerobic TE and running slower than goal pace — anaerobic
+// TE specifically measures interval/sprint-style stress, not sustained aerobic load.
+// This catches that case using Garmin's own "Improving fitness" aerobic-TE threshold
+// plus a real elevated average HR, without relying on pace at all.
+const HARD_AEROBIC_TE = 3.0;
+const HARD_EFFORT_HR = 146;
 function isHardRun(a) {
-  const te = a && a.training_effect_anaerobic;
+  const teAnaerobic = a && a.training_effect_anaerobic;
+  const teAerobic = a && a.training_effect_aerobic;
+  const avgHr = a && a.avg_hr;
   const pace = activityPaceSec(a);
-  const teHard = typeof te === "number" && te >= HARD_ANAEROBIC_TE;
+  const anaerobicHard = typeof teAnaerobic === "number" && teAnaerobic >= HARD_ANAEROBIC_TE;
+  const aerobicEffortHard = typeof teAerobic === "number" && teAerobic >= HARD_AEROBIC_TE
+    && typeof avgHr === "number" && avgHr > HARD_EFFORT_HR;
   const paceHard = pace != null && pace <= GOAL_PACE_SEC;
-  return teHard || paceHard;
+  return anaerobicHard || aerobicEffortHard || paceHard;
 }
 
 const AFTER_RUN_NOTE = "This syncs from your watch automatically — nothing to log. Come back for your next prescription once it lands.";
