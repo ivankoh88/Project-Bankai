@@ -270,10 +270,22 @@
       "hrv_avg_ms": null,
       "sleep_seconds": null,
       "sleep_score": null,
-      "body_battery_low": 72,
+      "body_battery_low": 40,
       "body_battery_high": 84,
       "stress_avg": 18,
-      "steps": 9431,
+      "steps": 19430,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-08-24",
+      "resting_hr": null,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": null,
+      "body_battery_high": null,
+      "stress_avg": null,
+      "steps": null,
       "training_readiness": null
     }
   ],
@@ -549,6 +561,19 @@
       "avg_hr": 106.0,
       "max_hr": 137.0,
       "training_effect_aerobic": 0.4000000059604645,
+      "training_effect_anaerobic": 0.0
+    },
+    {
+      "id": 24080978708,
+      "name": "Treadmill Running",
+      "type": "treadmill_running",
+      "start_local": "2026-08-23 15:07:12",
+      "duration_seconds": 3244.2919921875,
+      "distance_m": 10000.0,
+      "calories": 672.0,
+      "avg_hr": 157.0,
+      "max_hr": 170.0,
+      "training_effect_aerobic": 3.799999952316284,
       "training_effect_anaerobic": 0.0
     }
   ]
