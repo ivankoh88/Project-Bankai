@@ -458,14 +458,26 @@
     },
     {
       "date": "2026-09-08",
-      "resting_hr": 74,
+      "resting_hr": 81,
       "hrv_avg_ms": null,
       "sleep_seconds": null,
       "sleep_score": null,
-      "body_battery_low": 86,
+      "body_battery_low": 75,
       "body_battery_high": 89,
-      "stress_avg": 30,
-      "steps": 384,
+      "stress_avg": 38,
+      "steps": 4161,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-09-09",
+      "resting_hr": null,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": null,
+      "body_battery_high": null,
+      "stress_avg": null,
+      "steps": null,
       "training_readiness": null
     }
   ],
