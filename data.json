@@ -477,7 +477,19 @@
       "body_battery_low": null,
       "body_battery_high": null,
       "stress_avg": null,
-      "steps": null,
+      "steps": 13,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-09-10",
+      "resting_hr": 87,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 78,
+      "body_battery_high": 91,
+      "stress_avg": 36,
+      "steps": 3110,
       "training_readiness": null
     }
   ],
@@ -845,6 +857,19 @@
       "max_hr": 192.0,
       "training_effect_aerobic": 3.5999999046325684,
       "training_effect_anaerobic": 2.700000047683716
+    },
+    {
+      "id": 24303159354,
+      "name": "Sprint",
+      "type": "indoor_cardio",
+      "start_local": "2026-09-10 06:31:53",
+      "duration_seconds": 2123.7099609375,
+      "distance_m": 0.0,
+      "calories": 381.0,
+      "avg_hr": 146.0,
+      "max_hr": 193.0,
+      "training_effect_aerobic": 2.799999952316284,
+      "training_effect_anaerobic": 2.299999952316284
     }
   ]
 }
