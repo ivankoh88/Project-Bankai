@@ -494,6 +494,18 @@
     },
     {
       "date": "2026-09-11",
+      "resting_hr": 112,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 18,
+      "body_battery_high": 22,
+      "stress_avg": 24,
+      "steps": 10079,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-09-12",
       "resting_hr": null,
       "hrv_avg_ms": null,
       "sleep_seconds": null,
@@ -882,6 +894,19 @@
       "max_hr": 193.0,
       "training_effect_aerobic": 2.799999952316284,
       "training_effect_anaerobic": 2.299999952316284
+    },
+    {
+      "id": 24322246181,
+      "name": "Treadmill Running",
+      "type": "treadmill_running",
+      "start_local": "2026-09-11 21:31:23",
+      "duration_seconds": 3602.410888671875,
+      "distance_m": 8400.0,
+      "calories": 485.0,
+      "avg_hr": 130.0,
+      "max_hr": 141.0,
+      "training_effect_aerobic": 2.0999999046325684,
+      "training_effect_anaerobic": 0.0
     }
   ]
 }
