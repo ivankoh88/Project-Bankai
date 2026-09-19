@@ -587,6 +587,18 @@
       "stress_avg": null,
       "steps": null,
       "training_readiness": null
+    },
+    {
+      "date": "2026-09-19",
+      "resting_hr": 80,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 68,
+      "body_battery_high": 86,
+      "stress_avg": 26,
+      "steps": 9207,
+      "training_readiness": null
     }
   ],
   "activities": [
@@ -1031,6 +1043,19 @@
       "max_hr": 188.0,
       "training_effect_aerobic": 3.5999999046325684,
       "training_effect_anaerobic": 1.5
+    },
+    {
+      "id": 24413566312,
+      "name": "Singapore Running",
+      "type": "running",
+      "start_local": "2026-09-19 07:31:21",
+      "duration_seconds": 3003.610107421875,
+      "distance_m": 7972.669921875,
+      "calories": 680.0,
+      "avg_hr": 179.0,
+      "max_hr": 195.0,
+      "training_effect_aerobic": 4.599999904632568,
+      "training_effect_anaerobic": 0.30000001192092896
     }
   ]
 }
