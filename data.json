@@ -638,14 +638,26 @@
     },
     {
       "date": "2026-09-23",
-      "resting_hr": null,
+      "resting_hr": 61,
       "hrv_avg_ms": null,
       "sleep_seconds": null,
       "sleep_score": null,
-      "body_battery_low": 75,
-      "body_battery_high": 75,
-      "stress_avg": null,
-      "steps": 42,
+      "body_battery_low": 45,
+      "body_battery_high": 81,
+      "stress_avg": 12,
+      "steps": 20848,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-09-24",
+      "resting_hr": 77,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 83,
+      "body_battery_high": 98,
+      "stress_avg": 24,
+      "steps": 4609,
       "training_readiness": null
     }
   ],
@@ -1143,6 +1155,32 @@
       "max_hr": 192.0,
       "training_effect_aerobic": 3.5,
       "training_effect_anaerobic": 2.5
+    },
+    {
+      "id": 24468548398,
+      "name": "Singapore Running",
+      "type": "running",
+      "start_local": "2026-09-23 19:26:30",
+      "duration_seconds": 2733.458984375,
+      "distance_m": 7998.2001953125,
+      "calories": 606.0,
+      "avg_hr": 168.0,
+      "max_hr": 181.0,
+      "training_effect_aerobic": 4.0,
+      "training_effect_anaerobic": 1.0
+    },
+    {
+      "id": 24475749414,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-09-24 06:42:36",
+      "duration_seconds": 2654.9150390625,
+      "distance_m": 0.0,
+      "calories": 493.0,
+      "avg_hr": 149.0,
+      "max_hr": 183.0,
+      "training_effect_aerobic": 3.4000000953674316,
+      "training_effect_anaerobic": 2.0999999046325684
     }
   ]
 }
