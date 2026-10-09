@@ -822,10 +822,22 @@
       "hrv_avg_ms": null,
       "sleep_seconds": null,
       "sleep_score": null,
-      "body_battery_low": 74,
+      "body_battery_low": 73,
       "body_battery_high": 89,
       "stress_avg": 23,
-      "steps": 4473,
+      "steps": 4940,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-10-09",
+      "resting_hr": 127,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 61,
+      "body_battery_high": 76,
+      "stress_avg": 62,
+      "steps": 6407,
       "training_readiness": null
     }
   ],
@@ -1492,6 +1504,32 @@
       "max_hr": 179.0,
       "training_effect_aerobic": 3.5,
       "training_effect_anaerobic": 1.899999976158142
+    },
+    {
+      "id": 24658004706,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-10-09 08:34:37",
+      "duration_seconds": 1827.9339599609375,
+      "distance_m": 0.0,
+      "calories": 403.0,
+      "avg_hr": 165.0,
+      "max_hr": 208.0,
+      "training_effect_aerobic": 3.299999952316284,
+      "training_effect_anaerobic": 2.5
+    },
+    {
+      "id": 24658127083,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-10-09 09:07:19",
+      "duration_seconds": 1440.27099609375,
+      "distance_m": 0.0,
+      "calories": 333.0,
+      "avg_hr": 170.0,
+      "max_hr": 180.0,
+      "training_effect_aerobic": 3.299999952316284,
+      "training_effect_anaerobic": 0.0
     }
   ]
 }
