@@ -1034,14 +1034,26 @@
     },
     {
       "date": "2026-10-26",
-      "resting_hr": null,
+      "resting_hr": 114,
       "hrv_avg_ms": null,
       "sleep_seconds": null,
       "sleep_score": null,
-      "body_battery_low": null,
-      "body_battery_high": null,
-      "stress_avg": null,
-      "steps": null,
+      "body_battery_low": 15,
+      "body_battery_high": 24,
+      "stress_avg": 32,
+      "steps": 9491,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-10-27",
+      "resting_hr": 79,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 80,
+      "body_battery_high": 80,
+      "stress_avg": 31,
+      "steps": 28,
       "training_readiness": null
     }
   ],
@@ -1890,6 +1902,58 @@
       "max_hr": 177.0,
       "training_effect_aerobic": 3.299999952316284,
       "training_effect_anaerobic": 1.600000023841858
+    },
+    {
+      "id": 24857354795,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-10-26 21:29:31",
+      "duration_seconds": 1199.9930419921875,
+      "distance_m": 0.0,
+      "calories": 245.0,
+      "avg_hr": 152.0,
+      "max_hr": 168.0,
+      "training_effect_aerobic": 2.5999999046325684,
+      "training_effect_anaerobic": 0.0
+    },
+    {
+      "id": 24857537746,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-10-26 21:52:08",
+      "duration_seconds": 1022.0360107421875,
+      "distance_m": 0.0,
+      "calories": 236.0,
+      "avg_hr": 166.0,
+      "max_hr": 173.0,
+      "training_effect_aerobic": 3.0,
+      "training_effect_anaerobic": 0.0
+    },
+    {
+      "id": 24857712038,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-10-26 22:11:07",
+      "duration_seconds": 1039.3919677734375,
+      "distance_m": 0.0,
+      "calories": 246.0,
+      "avg_hr": 170.0,
+      "max_hr": 180.0,
+      "training_effect_aerobic": 3.0,
+      "training_effect_anaerobic": 0.0
+    },
+    {
+      "id": 24863204079,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-10-27 06:40:16",
+      "duration_seconds": 2611.347900390625,
+      "distance_m": 0.0,
+      "calories": 586.0,
+      "avg_hr": 162.0,
+      "max_hr": 181.0,
+      "training_effect_aerobic": 3.5999999046325684,
+      "training_effect_anaerobic": 1.399999976158142
     }
   ]
 }
