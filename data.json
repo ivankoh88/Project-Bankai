@@ -1070,14 +1070,26 @@
     },
     {
       "date": "2026-10-29",
-      "resting_hr": 74,
+      "resting_hr": 85,
       "hrv_avg_ms": null,
       "sleep_seconds": null,
       "sleep_score": null,
-      "body_battery_low": 87,
+      "body_battery_low": 75,
       "body_battery_high": 89,
       "stress_avg": 27,
-      "steps": 851,
+      "steps": 3701,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-10-30",
+      "resting_hr": 101,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 61,
+      "body_battery_high": 83,
+      "stress_avg": 25,
+      "steps": 11683,
       "training_readiness": null
     }
   ],
@@ -1991,6 +2003,58 @@
       "max_hr": 192.0,
       "training_effect_aerobic": 3.4000000953674316,
       "training_effect_anaerobic": 2.4000000953674316
+    },
+    {
+      "id": 24898435303,
+      "name": "Singapore Running",
+      "type": "running",
+      "start_local": "2026-10-30 05:29:24",
+      "duration_seconds": 709.3909912109375,
+      "distance_m": 2095.030029296875,
+      "calories": 160.0,
+      "avg_hr": 159.0,
+      "max_hr": 170.0,
+      "training_effect_aerobic": 2.4000000953674316,
+      "training_effect_anaerobic": 0.10000000149011612
+    },
+    {
+      "id": 24898605696,
+      "name": "Singapore Running",
+      "type": "running",
+      "start_local": "2026-10-30 05:44:03",
+      "duration_seconds": 1216.9169921875,
+      "distance_m": 2651.39990234375,
+      "calories": 269.0,
+      "avg_hr": 168.0,
+      "max_hr": 175.0,
+      "training_effect_aerobic": 3.0999999046325684,
+      "training_effect_anaerobic": 0.10000000149011612
+    },
+    {
+      "id": 24898763372,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-10-30 06:07:38",
+      "duration_seconds": 1126.968994140625,
+      "distance_m": 0.0,
+      "calories": 276.0,
+      "avg_hr": 173.0,
+      "max_hr": 178.0,
+      "training_effect_aerobic": 3.0999999046325684,
+      "training_effect_anaerobic": 0.0
+    },
+    {
+      "id": 24898887258,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-10-30 06:29:10",
+      "duration_seconds": 829.760986328125,
+      "distance_m": 0.0,
+      "calories": 198.0,
+      "avg_hr": 168.0,
+      "max_hr": 176.0,
+      "training_effect_aerobic": 2.700000047683716,
+      "training_effect_anaerobic": 0.20000000298023224
     }
   ]
 }
