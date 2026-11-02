@@ -1110,10 +1110,22 @@
       "hrv_avg_ms": null,
       "sleep_seconds": null,
       "sleep_score": null,
-      "body_battery_low": 76,
+      "body_battery_low": 75,
       "body_battery_high": 90,
       "stress_avg": 23,
-      "steps": 7158,
+      "steps": 7531,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-11-02",
+      "resting_hr": null,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": null,
+      "body_battery_high": null,
+      "stress_avg": null,
+      "steps": null,
       "training_readiness": null
     }
   ],
