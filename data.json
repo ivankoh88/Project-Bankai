@@ -1142,14 +1142,26 @@
     },
     {
       "date": "2026-11-04",
-      "resting_hr": null,
+      "resting_hr": 134,
       "hrv_avg_ms": null,
       "sleep_seconds": null,
       "sleep_score": null,
-      "body_battery_low": null,
-      "body_battery_high": null,
-      "stress_avg": null,
-      "steps": null,
+      "body_battery_low": 21,
+      "body_battery_high": 28,
+      "stress_avg": 27,
+      "steps": 8679,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-11-05",
+      "resting_hr": 119,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 73,
+      "body_battery_high": 86,
+      "stress_avg": 63,
+      "steps": 4722,
       "training_readiness": null
     }
   ],
@@ -2154,6 +2166,32 @@
       "max_hr": 201.0,
       "training_effect_aerobic": 3.4000000953674316,
       "training_effect_anaerobic": 2.200000047683716
+    },
+    {
+      "id": 24964324280,
+      "name": "Treadmill Running",
+      "type": "treadmill_running",
+      "start_local": "2026-11-04 21:14:59",
+      "duration_seconds": 2990.20703125,
+      "distance_m": 10000.0,
+      "calories": 703.0,
+      "avg_hr": 166.0,
+      "max_hr": 181.0,
+      "training_effect_aerobic": 4.199999809265137,
+      "training_effect_anaerobic": 0.0
+    },
+    {
+      "id": 24969743697,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-11-05 06:36:10",
+      "duration_seconds": 2201.345947265625,
+      "distance_m": 0.0,
+      "calories": 510.0,
+      "avg_hr": 165.0,
+      "max_hr": 185.0,
+      "training_effect_aerobic": 3.5999999046325684,
+      "training_effect_anaerobic": 2.0999999046325684
     }
   ]
 }
