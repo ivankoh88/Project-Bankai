@@ -1175,6 +1175,18 @@
       "stress_avg": null,
       "steps": null,
       "training_readiness": null
+    },
+    {
+      "date": "2026-11-07",
+      "resting_hr": 78,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 50,
+      "body_battery_high": 84,
+      "stress_avg": 27,
+      "steps": 14157,
+      "training_readiness": null
     }
   ],
   "activities": [
@@ -2204,6 +2216,19 @@
       "max_hr": 185.0,
       "training_effect_aerobic": 3.5999999046325684,
       "training_effect_anaerobic": 2.0999999046325684
+    },
+    {
+      "id": 24991353737,
+      "name": "Engine",
+      "type": "hiit",
+      "start_local": "2026-11-07 05:13:06",
+      "duration_seconds": 5430.9912109375,
+      "distance_m": 0.0,
+      "calories": 1267.0,
+      "avg_hr": 168.0,
+      "max_hr": 186.0,
+      "training_effect_aerobic": 4.900000095367432,
+      "training_effect_anaerobic": 2.200000047683716
     }
   ]
 }
