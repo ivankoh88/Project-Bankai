@@ -1271,6 +1271,18 @@
       "stress_avg": null,
       "steps": null,
       "training_readiness": null
+    },
+    {
+      "date": "2026-11-15",
+      "resting_hr": null,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 58,
+      "body_battery_high": 58,
+      "stress_avg": null,
+      "steps": 7,
+      "training_readiness": null
     }
   ],
   "activities": [
