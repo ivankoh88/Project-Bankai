@@ -1406,14 +1406,26 @@
     },
     {
       "date": "2026-11-26",
-      "resting_hr": null,
+      "resting_hr": 78,
       "hrv_avg_ms": null,
       "sleep_seconds": null,
       "sleep_score": null,
-      "body_battery_low": null,
-      "body_battery_high": null,
+      "body_battery_low": 28,
+      "body_battery_high": 28,
+      "stress_avg": 74,
+      "steps": 702,
+      "training_readiness": null
+    },
+    {
+      "date": "2026-11-27",
+      "resting_hr": 123,
+      "hrv_avg_ms": null,
+      "sleep_seconds": null,
+      "sleep_score": null,
+      "body_battery_low": 77,
+      "body_battery_high": 89,
       "stress_avg": null,
-      "steps": null,
+      "steps": 7268,
       "training_readiness": null
     }
   ],
@@ -2522,6 +2534,19 @@
       "max_hr": 184.0,
       "training_effect_aerobic": 3.200000047683716,
       "training_effect_anaerobic": 1.100000023841858
+    },
+    {
+      "id": 25210914516,
+      "name": "Singapore Running",
+      "type": "running",
+      "start_local": "2026-11-27 06:10:03",
+      "duration_seconds": 1811.2879638671875,
+      "distance_m": 5006.47998046875,
+      "calories": 387.0,
+      "avg_hr": 151.0,
+      "max_hr": 164.0,
+      "training_effect_aerobic": 3.0,
+      "training_effect_anaerobic": 0.0
     }
   ]
 }
